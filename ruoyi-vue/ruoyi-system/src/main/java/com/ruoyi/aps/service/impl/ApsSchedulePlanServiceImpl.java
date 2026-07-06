@@ -259,6 +259,7 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
     public Map<String, Object> confirmReschedulePlan(Long planId, String operatorName)
     {
         ApsSchedulePlan plan = validateReschedulePlan(planId);
+        validatePendingReschedulePlan(plan);
         plan.setPlanStatus("CONFIRMED");
         plan.setActiveFlag("Y");
         plan.setUpdateBy(operatorName);
@@ -287,6 +288,7 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
     public Map<String, Object> rejectReschedulePlan(Long planId, String operatorName)
     {
         ApsSchedulePlan plan = validateReschedulePlan(planId);
+        validatePendingReschedulePlan(plan);
         plan.setPlanStatus("REJECTED");
         plan.setActiveFlag("N");
         plan.setUpdateBy(operatorName);
@@ -389,6 +391,14 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
             throw new IllegalStateException("Only RESCHEDULE plan can be confirmed or rejected.");
         }
         return plan;
+    }
+
+    private void validatePendingReschedulePlan(ApsSchedulePlan plan)
+    {
+        if (!"PENDING".equals(plan.getPlanStatus()))
+        {
+            throw new IllegalStateException("Only PENDING RESCHEDULE plan can be confirmed or rejected.");
+        }
     }
 
     private void updateEventStatus(ApsSchedulePlan plan, String eventStatus, String operatorName, String remark)

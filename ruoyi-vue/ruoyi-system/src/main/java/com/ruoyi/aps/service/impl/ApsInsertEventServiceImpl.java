@@ -322,11 +322,6 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
             throw new IllegalStateException("Python local reschedule service did not return task schedules.");
         }
 
-        sourcePlan.setPlanStatus("HISTORY");
-        sourcePlan.setActiveFlag("N");
-        sourcePlan.setUpdateBy(operatorName);
-        apsSchedulePlanMapper.updateApsSchedulePlan(sourcePlan);
-
         ApsSchedulePlan newPlan = buildReschedulePlan(sourcePlan, event, response, scheduleStartTime, operatorName);
         apsSchedulePlanMapper.insertApsSchedulePlan(newPlan);
 
@@ -707,7 +702,7 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         plan.setPlanCode("RESCHEDULE-" + DateUtils.dateTimeNow());
         plan.setPlanName("插单局部重调度方案");
         plan.setPlanType("RESCHEDULE");
-        plan.setPlanStatus("ACTIVE");
+        plan.setPlanStatus("PENDING");
         plan.setSourcePlanId(sourcePlan.getPlanId());
         plan.setEventId(event.getEventId());
         plan.setAlgorithmName(response.getAlgorithmName());
@@ -715,7 +710,7 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         plan.setScheduleStartTime(scheduleStartTime);
         plan.setScheduleEndTime(scheduleEndTime);
         plan.setKpiJson(JSON.toJSONString(response.getKpi()));
-        plan.setActiveFlag("Y");
+        plan.setActiveFlag("N");
         plan.setDelFlag("0");
         plan.setCreateBy(operatorName);
         return plan;

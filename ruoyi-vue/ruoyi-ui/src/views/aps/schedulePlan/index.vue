@@ -282,7 +282,7 @@ export default {
       this.$router.push({ path: "/aps/scheduleTask/ganttCompare", query: { planId: row.planId } });
     },
     canConfirmOrReject(row) {
-      return row.planType === "RESCHEDULE" && (row.planStatus === "ACTIVE" || row.planStatus === "PENDING");
+      return row.planType === "RESCHEDULE" && row.planStatus === "PENDING";
     },
     handleConfirmPlan(row) {
       this.$modal.confirm("确定采用该重调度方案吗？采用后原方案将转为历史方案。").then(() => {

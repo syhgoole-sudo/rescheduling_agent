@@ -1,0 +1,56 @@
+mvn -pl ruoyi-admin spring-boot:run
+
+npm install
+npm run dev
+
+docker
+back
+forward
+redis
+
+ 1. 启动 Redis
+
+  如果已有容器 local-redis：
+
+  docker start local-redis
+
+  如果容器不存在：
+
+  docker run -d --name local-redis -p 6379:6379 redis:7
+
+  2. 启动 Python 算法服务
+
+  cd C:\Users\admin\Desktop\rescheduling_agent\ruoyi-vue\aps-algorithm-service
+  python -m uvicorn app.main:app --reload --port 8000
+
+  启动成功后访问：
+
+  http://localhost:8000/docs
+
+  3. 启动若依后端
+
+  cd C:\Users\admin\Desktop\rescheduling_agent\ruoyi-vue
+  mvn -pl ruoyi-admin spring-boot:run
+
+  如果提示模块依赖问题，先执行：
+
+  mvn clean install -DskipTests
+
+  然后再启动后端。
+
+  4. 启动若依前端
+
+  新开一个 PowerShell：
+
+  cd C:\Users\admin\Desktop\rescheduling_agent\ruoyi-vue\ruoyi-ui
+  npm.cmd run dev
+
+  启动后访问前端输出的地址，通常是：
+
+  http://localhost
+
+  或：
+
+  http://localhost:80
+
+  建议顺序：Redis -> Python算法服务 -> 若依后端 -> 若依前端。

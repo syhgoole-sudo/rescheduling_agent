@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.aps.mapper.ApsOrderMapper">
+
+    <resultMap type="com.ruoyi.aps.domain.ApsOrder" id="ApsOrderResult">
+        <id property="orderId" column="order_id" />
+        <result property="orderCode" column="order_code" />
+        <result property="orderType" column="order_type" />
+        <result property="productId" column="product_id" />
+        <result property="productCode" column="product_code" />
+        <result property="quantity" column="quantity" />
+        <result property="priorityLevel" column="priority_level" />
+        <result property="releaseTime" column="release_time" />
+        <result property="dueTime" column="due_time" />
+        <result property="orderStatus" column="order_status" />
+        <result property="delFlag" column="del_flag" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectApsOrderVo">
+        select order_id, order_code, order_type, product_id, product_code, quantity, priority_level, release_time, due_time, order_status, del_flag, create_by, create_time, update_by, update_time, remark from aps_order
+    </sql>
+
+    <select id="selectApsOrderList" parameterType="com.ruoyi.aps.domain.ApsOrder" resultMap="ApsOrderResult">
+        <include refid="selectApsOrderVo"/>
+        <where>
+            <if test="orderCode != null and orderCode != ''"> and order_code like concat('%', #{orderCode}, '%')</if>
+            <if test="orderType != null and orderType != ''"> and order_type like concat('%', #{orderType}, '%')</if>
+            <if test="productId != null"> and product_id = #{productId}</if>
+            <if test="productCode != null and productCode != ''"> and product_code like concat('%', #{productCode}, '%')</if>
+            <if test="orderStatus != null and orderStatus != ''"> and order_status like concat('%', #{orderStatus}, '%')</if>
+        </where>
+    </select>
+
+    <select id="selectApsOrderById" parameterType="Long" resultMap="ApsOrderResult">
+        <include refid="selectApsOrderVo"/>
+        where order_id = #{orderId}
+    </select>
+
+    <insert id="insertApsOrder" parameterType="com.ruoyi.aps.domain.ApsOrder" useGeneratedKeys="true" keyProperty="orderId">
+        insert into aps_order
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="orderCode != null">order_code,</if>
+            <if test="orderType != null">order_type,</if>
+            <if test="productId != null">product_id,</if>
+            <if test="productCode != null">product_code,</if>
+            <if test="quantity != null">quantity,</if>
+            <if test="priorityLevel != null">priority_level,</if>
+            <if test="releaseTime != null">release_time,</if>
+            <if test="dueTime != null">due_time,</if>
+            <if test="orderStatus != null">order_status,</if>
+            <if test="delFlag != null">del_flag,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="orderCode != null">#{orderCode},</if>
+            <if test="orderType != null">#{orderType},</if>
+            <if test="productId != null">#{productId},</if>
+            <if test="productCode != null">#{productCode},</if>
+            <if test="quantity != null">#{quantity},</if>
+            <if test="priorityLevel != null">#{priorityLevel},</if>
+            <if test="releaseTime != null">#{releaseTime},</if>
+            <if test="dueTime != null">#{dueTime},</if>
+            <if test="orderStatus != null">#{orderStatus},</if>
+            <if test="delFlag != null">#{delFlag},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateApsOrder" parameterType="com.ruoyi.aps.domain.ApsOrder">
+        update aps_order
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="orderCode != null">order_code = #{orderCode},</if>
+            <if test="orderType != null">order_type = #{orderType},</if>
+            <if test="productId != null">product_id = #{productId},</if>
+            <if test="productCode != null">product_code = #{productCode},</if>
+            <if test="quantity != null">quantity = #{quantity},</if>
+            <if test="priorityLevel != null">priority_level = #{priorityLevel},</if>
+            <if test="releaseTime != null">release_time = #{releaseTime},</if>
+            <if test="dueTime != null">due_time = #{dueTime},</if>
+            <if test="orderStatus != null">order_status = #{orderStatus},</if>
+            <if test="delFlag != null">del_flag = #{delFlag},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </trim>
+        where order_id = #{orderId}
+    </update>
+
+    <delete id="deleteApsOrderById" parameterType="Long">
+        delete from aps_order where order_id = #{orderId}
+    </delete>
+
+    <delete id="deleteApsOrderByIds" parameterType="Long">
+        delete from aps_order where order_id in
+        <foreach item="orderId" collection="array" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+    </delete>
+
+    <update id="updateOrdersScheduledByIds" parameterType="Long">
+        update aps_order
+        set order_status = 'SCHEDULED',
+            update_time = sysdate()
+        where order_id in
+        <foreach item="orderId" collection="array" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+    </update>
+</mapper>

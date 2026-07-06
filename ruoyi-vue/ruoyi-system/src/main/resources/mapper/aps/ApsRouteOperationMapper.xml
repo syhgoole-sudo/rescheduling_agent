@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.aps.mapper.ApsRouteOperationMapper">
+
+    <resultMap type="com.ruoyi.aps.domain.ApsRouteOperation" id="ApsRouteOperationResult">
+        <id property="routeOperationId" column="route_operation_id" />
+        <result property="productId" column="product_id" />
+        <result property="productCode" column="product_code" />
+        <result property="processSeq" column="process_seq" />
+        <result property="processCode" column="process_code" />
+        <result property="processName" column="process_name" />
+        <result property="equipmentGroupId" column="equipment_group_id" />
+        <result property="standardDuration" column="standard_duration" />
+        <result property="status" column="status" />
+        <result property="delFlag" column="del_flag" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectApsRouteOperationVo">
+        select route_operation_id, product_id, product_code, process_seq, process_code, process_name, equipment_group_id, standard_duration, status, del_flag, create_by, create_time, update_by, update_time, remark from aps_route_operation
+    </sql>
+
+    <select id="selectApsRouteOperationList" parameterType="com.ruoyi.aps.domain.ApsRouteOperation" resultMap="ApsRouteOperationResult">
+        <include refid="selectApsRouteOperationVo"/>
+        <where>
+            <if test="productId != null"> and product_id = #{productId}</if>
+            <if test="productCode != null and productCode != ''"> and product_code like concat('%', #{productCode}, '%')</if>
+            <if test="processCode != null and processCode != ''"> and process_code like concat('%', #{processCode}, '%')</if>
+            <if test="processName != null and processName != ''"> and process_name like concat('%', #{processName}, '%')</if>
+            <if test="equipmentGroupId != null"> and equipment_group_id = #{equipmentGroupId}</if>
+            <if test="status != null and status != ''"> and status like concat('%', #{status}, '%')</if>
+        </where>
+    </select>
+
+    <select id="selectApsRouteOperationById" parameterType="Long" resultMap="ApsRouteOperationResult">
+        <include refid="selectApsRouteOperationVo"/>
+        where route_operation_id = #{routeOperationId}
+    </select>
+
+    <insert id="insertApsRouteOperation" parameterType="com.ruoyi.aps.domain.ApsRouteOperation" useGeneratedKeys="true" keyProperty="routeOperationId">
+        insert into aps_route_operation
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="productId != null">product_id,</if>
+            <if test="productCode != null">product_code,</if>
+            <if test="processSeq != null">process_seq,</if>
+            <if test="processCode != null">process_code,</if>
+            <if test="processName != null">process_name,</if>
+            <if test="equipmentGroupId != null">equipment_group_id,</if>
+            <if test="standardDuration != null">standard_duration,</if>
+            <if test="status != null">status,</if>
+            <if test="delFlag != null">del_flag,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="productId != null">#{productId},</if>
+            <if test="productCode != null">#{productCode},</if>
+            <if test="processSeq != null">#{processSeq},</if>
+            <if test="processCode != null">#{processCode},</if>
+            <if test="processName != null">#{processName},</if>
+            <if test="equipmentGroupId != null">#{equipmentGroupId},</if>
+            <if test="standardDuration != null">#{standardDuration},</if>
+            <if test="status != null">#{status},</if>
+            <if test="delFlag != null">#{delFlag},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateApsRouteOperation" parameterType="com.ruoyi.aps.domain.ApsRouteOperation">
+        update aps_route_operation
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="productId != null">product_id = #{productId},</if>
+            <if test="productCode != null">product_code = #{productCode},</if>
+            <if test="processSeq != null">process_seq = #{processSeq},</if>
+            <if test="processCode != null">process_code = #{processCode},</if>
+            <if test="processName != null">process_name = #{processName},</if>
+            <if test="equipmentGroupId != null">equipment_group_id = #{equipmentGroupId},</if>
+            <if test="standardDuration != null">standard_duration = #{standardDuration},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="delFlag != null">del_flag = #{delFlag},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </trim>
+        where route_operation_id = #{routeOperationId}
+    </update>
+
+    <delete id="deleteApsRouteOperationById" parameterType="Long">
+        delete from aps_route_operation where route_operation_id = #{routeOperationId}
+    </delete>
+
+    <delete id="deleteApsRouteOperationByIds" parameterType="Long">
+        delete from aps_route_operation where route_operation_id in
+        <foreach item="routeOperationId" collection="array" open="(" separator="," close=")">
+            #{routeOperationId}
+        </foreach>
+    </delete>
+</mapper>

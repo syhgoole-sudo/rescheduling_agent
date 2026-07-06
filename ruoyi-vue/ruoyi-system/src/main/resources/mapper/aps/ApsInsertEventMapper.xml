@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.aps.mapper.ApsInsertEventMapper">
+
+    <resultMap type="com.ruoyi.aps.domain.ApsInsertEvent" id="ApsInsertEventResult">
+        <id property="eventId" column="event_id" />
+        <result property="eventCode" column="event_code" />
+        <result property="insertOrderId" column="insert_order_id" />
+        <result property="sourcePlanId" column="source_plan_id" />
+        <result property="newPlanId" column="new_plan_id" />
+        <result property="eventTime" column="event_time" />
+        <result property="eventStatus" column="event_status" />
+        <result property="impactJson" column="impact_json" />
+        <result property="strategyType" column="strategy_type" />
+        <result property="eventReason" column="event_reason" />
+        <result property="delFlag" column="del_flag" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectApsInsertEventVo">
+        select event_id, event_code, insert_order_id, source_plan_id, new_plan_id, event_time, event_status, impact_json, strategy_type, event_reason, del_flag, create_by, create_time, update_by, update_time, remark from aps_insert_event
+    </sql>
+
+    <select id="selectApsInsertEventList" parameterType="com.ruoyi.aps.domain.ApsInsertEvent" resultMap="ApsInsertEventResult">
+        <include refid="selectApsInsertEventVo"/>
+        <where>
+            <if test="eventCode != null and eventCode != ''"> and event_code like concat('%', #{eventCode}, '%')</if>
+            <if test="insertOrderId != null"> and insert_order_id = #{insertOrderId}</if>
+            <if test="eventStatus != null and eventStatus != ''"> and event_status like concat('%', #{eventStatus}, '%')</if>
+        </where>
+    </select>
+
+    <select id="selectApsInsertEventById" parameterType="Long" resultMap="ApsInsertEventResult">
+        <include refid="selectApsInsertEventVo"/>
+        where event_id = #{eventId}
+    </select>
+
+    <insert id="insertApsInsertEvent" parameterType="com.ruoyi.aps.domain.ApsInsertEvent" useGeneratedKeys="true" keyProperty="eventId">
+        insert into aps_insert_event
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="eventCode != null">event_code,</if>
+            <if test="insertOrderId != null">insert_order_id,</if>
+            <if test="sourcePlanId != null">source_plan_id,</if>
+            <if test="newPlanId != null">new_plan_id,</if>
+            <if test="eventTime != null">event_time,</if>
+            <if test="eventStatus != null">event_status,</if>
+            <if test="impactJson != null">impact_json,</if>
+            <if test="strategyType != null">strategy_type,</if>
+            <if test="eventReason != null">event_reason,</if>
+            <if test="delFlag != null">del_flag,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="eventCode != null">#{eventCode},</if>
+            <if test="insertOrderId != null">#{insertOrderId},</if>
+            <if test="sourcePlanId != null">#{sourcePlanId},</if>
+            <if test="newPlanId != null">#{newPlanId},</if>
+            <if test="eventTime != null">#{eventTime},</if>
+            <if test="eventStatus != null">#{eventStatus},</if>
+            <if test="impactJson != null">#{impactJson},</if>
+            <if test="strategyType != null">#{strategyType},</if>
+            <if test="eventReason != null">#{eventReason},</if>
+            <if test="delFlag != null">#{delFlag},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateApsInsertEvent" parameterType="com.ruoyi.aps.domain.ApsInsertEvent">
+        update aps_insert_event
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="eventCode != null">event_code = #{eventCode},</if>
+            <if test="insertOrderId != null">insert_order_id = #{insertOrderId},</if>
+            <if test="sourcePlanId != null">source_plan_id = #{sourcePlanId},</if>
+            <if test="newPlanId != null">new_plan_id = #{newPlanId},</if>
+            <if test="eventTime != null">event_time = #{eventTime},</if>
+            <if test="eventStatus != null">event_status = #{eventStatus},</if>
+            <if test="impactJson != null">impact_json = #{impactJson},</if>
+            <if test="strategyType != null">strategy_type = #{strategyType},</if>
+            <if test="eventReason != null">event_reason = #{eventReason},</if>
+            <if test="delFlag != null">del_flag = #{delFlag},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </trim>
+        where event_id = #{eventId}
+    </update>
+
+    <delete id="deleteApsInsertEventById" parameterType="Long">
+        delete from aps_insert_event where event_id = #{eventId}
+    </delete>
+
+    <delete id="deleteApsInsertEventByIds" parameterType="Long">
+        delete from aps_insert_event where event_id in
+        <foreach item="eventId" collection="array" open="(" separator="," close=")">
+            #{eventId}
+        </foreach>
+    </delete>
+</mapper>

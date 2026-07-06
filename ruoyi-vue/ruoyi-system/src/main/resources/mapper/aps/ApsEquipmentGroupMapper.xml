@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.aps.mapper.ApsEquipmentGroupMapper">
+
+    <resultMap type="com.ruoyi.aps.domain.ApsEquipmentGroup" id="ApsEquipmentGroupResult">
+        <id property="equipmentGroupId" column="equipment_group_id" />
+        <result property="equipmentGroupCode" column="equipment_group_code" />
+        <result property="equipmentGroupName" column="equipment_group_name" />
+        <result property="status" column="status" />
+        <result property="delFlag" column="del_flag" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectApsEquipmentGroupVo">
+        select equipment_group_id, equipment_group_code, equipment_group_name, status, del_flag, create_by, create_time, update_by, update_time, remark from aps_equipment_group
+    </sql>
+
+    <select id="selectApsEquipmentGroupList" parameterType="com.ruoyi.aps.domain.ApsEquipmentGroup" resultMap="ApsEquipmentGroupResult">
+        <include refid="selectApsEquipmentGroupVo"/>
+        <where>
+            <if test="equipmentGroupCode != null and equipmentGroupCode != ''"> and equipment_group_code like concat('%', #{equipmentGroupCode}, '%')</if>
+            <if test="equipmentGroupName != null and equipmentGroupName != ''"> and equipment_group_name like concat('%', #{equipmentGroupName}, '%')</if>
+            <if test="status != null and status != ''"> and status like concat('%', #{status}, '%')</if>
+        </where>
+    </select>
+
+    <select id="selectApsEquipmentGroupById" parameterType="Long" resultMap="ApsEquipmentGroupResult">
+        <include refid="selectApsEquipmentGroupVo"/>
+        where equipment_group_id = #{equipmentGroupId}
+    </select>
+
+    <insert id="insertApsEquipmentGroup" parameterType="com.ruoyi.aps.domain.ApsEquipmentGroup" useGeneratedKeys="true" keyProperty="equipmentGroupId">
+        insert into aps_equipment_group
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="equipmentGroupCode != null">equipment_group_code,</if>
+            <if test="equipmentGroupName != null">equipment_group_name,</if>
+            <if test="status != null">status,</if>
+            <if test="delFlag != null">del_flag,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="equipmentGroupCode != null">#{equipmentGroupCode},</if>
+            <if test="equipmentGroupName != null">#{equipmentGroupName},</if>
+            <if test="status != null">#{status},</if>
+            <if test="delFlag != null">#{delFlag},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateApsEquipmentGroup" parameterType="com.ruoyi.aps.domain.ApsEquipmentGroup">
+        update aps_equipment_group
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="equipmentGroupCode != null">equipment_group_code = #{equipmentGroupCode},</if>
+            <if test="equipmentGroupName != null">equipment_group_name = #{equipmentGroupName},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="delFlag != null">del_flag = #{delFlag},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </trim>
+        where equipment_group_id = #{equipmentGroupId}
+    </update>
+
+    <delete id="deleteApsEquipmentGroupById" parameterType="Long">
+        delete from aps_equipment_group where equipment_group_id = #{equipmentGroupId}
+    </delete>
+
+    <delete id="deleteApsEquipmentGroupByIds" parameterType="Long">
+        delete from aps_equipment_group where equipment_group_id in
+        <foreach item="equipmentGroupId" collection="array" open="(" separator="," close=")">
+            #{equipmentGroupId}
+        </foreach>
+    </delete>
+</mapper>

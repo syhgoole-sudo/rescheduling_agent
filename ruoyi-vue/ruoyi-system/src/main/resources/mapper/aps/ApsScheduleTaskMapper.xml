@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.aps.mapper.ApsScheduleTaskMapper">
+
+    <resultMap type="com.ruoyi.aps.domain.ApsScheduleTask" id="ApsScheduleTaskResult">
+        <id property="taskId" column="task_id" />
+        <result property="planId" column="plan_id" />
+        <result property="orderId" column="order_id" />
+        <result property="orderCode" column="order_code" />
+        <result property="productId" column="product_id" />
+        <result property="productCode" column="product_code" />
+        <result property="processSeq" column="process_seq" />
+        <result property="processCode" column="process_code" />
+        <result property="processName" column="process_name" />
+        <result property="equipmentGroupId" column="equipment_group_id" />
+        <result property="equipmentId" column="equipment_id" />
+        <result property="equipmentCode" column="equipment_code" />
+        <result property="plannedStartTime" column="planned_start_time" />
+        <result property="plannedEndTime" column="planned_end_time" />
+        <result property="duration" column="duration" />
+        <result property="taskStatus" column="task_status" />
+        <result property="isFrozen" column="is_frozen" />
+        <result property="isInserted" column="is_inserted" />
+        <result property="isChanged" column="is_changed" />
+        <result property="sourceTaskId" column="source_task_id" />
+        <result property="originalStartTime" column="original_start_time" />
+        <result property="originalEndTime" column="original_end_time" />
+        <result property="originalEquipmentId" column="original_equipment_id" />
+        <result property="delFlag" column="del_flag" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectApsScheduleTaskVo">
+        select task_id, plan_id, order_id, order_code, product_id, product_code, process_seq, process_code, process_name, equipment_group_id, equipment_id, equipment_code, planned_start_time, planned_end_time, duration, task_status, is_frozen, is_inserted, is_changed, source_task_id, original_start_time, original_end_time, original_equipment_id, del_flag, create_by, create_time, update_by, update_time, remark from aps_schedule_task
+    </sql>
+
+    <select id="selectApsScheduleTaskList" parameterType="com.ruoyi.aps.domain.ApsScheduleTask" resultMap="ApsScheduleTaskResult">
+        <include refid="selectApsScheduleTaskVo"/>
+        <where>
+            <if test="planId != null"> and plan_id = #{planId}</if>
+            <if test="orderId != null"> and order_id = #{orderId}</if>
+            <if test="orderCode != null and orderCode != ''"> and order_code like concat('%', #{orderCode}, '%')</if>
+            <if test="equipmentId != null"> and equipment_id = #{equipmentId}</if>
+            <if test="taskStatus != null and taskStatus != ''"> and task_status like concat('%', #{taskStatus}, '%')</if>
+        </where>
+        order by equipment_id asc, planned_start_time asc, process_seq asc
+    </select>
+
+    <select id="selectApsScheduleTaskById" parameterType="Long" resultMap="ApsScheduleTaskResult">
+        <include refid="selectApsScheduleTaskVo"/>
+        where task_id = #{taskId}
+    </select>
+
+    <select id="selectApsScheduleTaskListByPlanId" parameterType="Long" resultMap="ApsScheduleTaskResult">
+        <include refid="selectApsScheduleTaskVo"/>
+        where plan_id = #{planId}
+          and (del_flag = '0' or del_flag is null)
+        order by equipment_id asc, planned_start_time asc, process_seq asc
+    </select>
+
+    <select id="selectAffectedTasks" resultMap="ApsScheduleTaskResult">
+        <include refid="selectApsScheduleTaskVo"/>
+        where plan_id = #{planId}
+          and planned_start_time &gt;= #{releaseTime}
+          and (is_frozen = 'N' or is_frozen is null)
+          and (del_flag = '0' or del_flag is null)
+          <if test="equipmentGroupIds != null and equipmentGroupIds.size() > 0">
+              and equipment_group_id in
+              <foreach item="equipmentGroupId" collection="equipmentGroupIds" open="(" separator="," close=")">
+                  #{equipmentGroupId}
+              </foreach>
+          </if>
+        order by equipment_id asc, planned_start_time asc, process_seq asc
+    </select>
+
+    <insert id="insertApsScheduleTask" parameterType="com.ruoyi.aps.domain.ApsScheduleTask" useGeneratedKeys="true" keyProperty="taskId">
+        insert into aps_schedule_task
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="planId != null">plan_id,</if>
+            <if test="orderId != null">order_id,</if>
+            <if test="orderCode != null">order_code,</if>
+            <if test="productId != null">product_id,</if>
+            <if test="productCode != null">product_code,</if>
+            <if test="processSeq != null">process_seq,</if>
+            <if test="processCode != null">process_code,</if>
+            <if test="processName != null">process_name,</if>
+            <if test="equipmentGroupId != null">equipment_group_id,</if>
+            <if test="equipmentId != null">equipment_id,</if>
+            <if test="equipmentCode != null">equipment_code,</if>
+            <if test="plannedStartTime != null">planned_start_time,</if>
+            <if test="plannedEndTime != null">planned_end_time,</if>
+            <if test="duration != null">duration,</if>
+            <if test="taskStatus != null">task_status,</if>
+            <if test="isFrozen != null">is_frozen,</if>
+            <if test="isInserted != null">is_inserted,</if>
+            <if test="isChanged != null">is_changed,</if>
+            <if test="sourceTaskId != null">source_task_id,</if>
+            <if test="originalStartTime != null">original_start_time,</if>
+            <if test="originalEndTime != null">original_end_time,</if>
+            <if test="originalEquipmentId != null">original_equipment_id,</if>
+            <if test="delFlag != null">del_flag,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="planId != null">#{planId},</if>
+            <if test="orderId != null">#{orderId},</if>
+            <if test="orderCode != null">#{orderCode},</if>
+            <if test="productId != null">#{productId},</if>
+            <if test="productCode != null">#{productCode},</if>
+            <if test="processSeq != null">#{processSeq},</if>
+            <if test="processCode != null">#{processCode},</if>
+            <if test="processName != null">#{processName},</if>
+            <if test="equipmentGroupId != null">#{equipmentGroupId},</if>
+            <if test="equipmentId != null">#{equipmentId},</if>
+            <if test="equipmentCode != null">#{equipmentCode},</if>
+            <if test="plannedStartTime != null">#{plannedStartTime},</if>
+            <if test="plannedEndTime != null">#{plannedEndTime},</if>
+            <if test="duration != null">#{duration},</if>
+            <if test="taskStatus != null">#{taskStatus},</if>
+            <if test="isFrozen != null">#{isFrozen},</if>
+            <if test="isInserted != null">#{isInserted},</if>
+            <if test="isChanged != null">#{isChanged},</if>
+            <if test="sourceTaskId != null">#{sourceTaskId},</if>
+            <if test="originalStartTime != null">#{originalStartTime},</if>
+            <if test="originalEndTime != null">#{originalEndTime},</if>
+            <if test="originalEquipmentId != null">#{originalEquipmentId},</if>
+            <if test="delFlag != null">#{delFlag},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateApsScheduleTask" parameterType="com.ruoyi.aps.domain.ApsScheduleTask">
+        update aps_schedule_task
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="planId != null">plan_id = #{planId},</if>
+            <if test="orderId != null">order_id = #{orderId},</if>
+            <if test="orderCode != null">order_code = #{orderCode},</if>
+            <if test="productId != null">product_id = #{productId},</if>
+            <if test="productCode != null">product_code = #{productCode},</if>
+            <if test="processSeq != null">process_seq = #{processSeq},</if>
+            <if test="processCode != null">process_code = #{processCode},</if>
+            <if test="processName != null">process_name = #{processName},</if>
+            <if test="equipmentGroupId != null">equipment_group_id = #{equipmentGroupId},</if>
+            <if test="equipmentId != null">equipment_id = #{equipmentId},</if>
+            <if test="equipmentCode != null">equipment_code = #{equipmentCode},</if>
+            <if test="plannedStartTime != null">planned_start_time = #{plannedStartTime},</if>
+            <if test="plannedEndTime != null">planned_end_time = #{plannedEndTime},</if>
+            <if test="duration != null">duration = #{duration},</if>
+            <if test="taskStatus != null">task_status = #{taskStatus},</if>
+            <if test="isFrozen != null">is_frozen = #{isFrozen},</if>
+            <if test="isInserted != null">is_inserted = #{isInserted},</if>
+            <if test="isChanged != null">is_changed = #{isChanged},</if>
+            <if test="sourceTaskId != null">source_task_id = #{sourceTaskId},</if>
+            <if test="originalStartTime != null">original_start_time = #{originalStartTime},</if>
+            <if test="originalEndTime != null">original_end_time = #{originalEndTime},</if>
+            <if test="originalEquipmentId != null">original_equipment_id = #{originalEquipmentId},</if>
+            <if test="delFlag != null">del_flag = #{delFlag},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </trim>
+        where task_id = #{taskId}
+    </update>
+
+    <delete id="deleteApsScheduleTaskById" parameterType="Long">
+        delete from aps_schedule_task where task_id = #{taskId}
+    </delete>
+
+    <delete id="deleteApsScheduleTaskByIds" parameterType="Long">
+        delete from aps_schedule_task where task_id in
+        <foreach item="taskId" collection="array" open="(" separator="," close=")">
+            #{taskId}
+        </foreach>
+    </delete>
+</mapper>

@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.aps.mapper.ApsSchedulePlanMapper">
+
+    <resultMap type="com.ruoyi.aps.domain.ApsSchedulePlan" id="ApsSchedulePlanResult">
+        <id property="planId" column="plan_id" />
+        <result property="planCode" column="plan_code" />
+        <result property="planName" column="plan_name" />
+        <result property="planType" column="plan_type" />
+        <result property="planStatus" column="plan_status" />
+        <result property="sourcePlanId" column="source_plan_id" />
+        <result property="eventId" column="event_id" />
+        <result property="algorithmName" column="algorithm_name" />
+        <result property="strategyType" column="strategy_type" />
+        <result property="scheduleStartTime" column="schedule_start_time" />
+        <result property="scheduleEndTime" column="schedule_end_time" />
+        <result property="kpiJson" column="kpi_json" />
+        <result property="aiExplanation" column="ai_explanation" />
+        <result property="activeFlag" column="active_flag" />
+        <result property="delFlag" column="del_flag" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectApsSchedulePlanVo">
+        select plan_id, plan_code, plan_name, plan_type, plan_status, source_plan_id, event_id, algorithm_name, strategy_type, schedule_start_time, schedule_end_time, kpi_json, ai_explanation, active_flag, del_flag, create_by, create_time, update_by, update_time, remark from aps_schedule_plan
+    </sql>
+
+    <select id="selectApsSchedulePlanList" parameterType="com.ruoyi.aps.domain.ApsSchedulePlan" resultMap="ApsSchedulePlanResult">
+        <include refid="selectApsSchedulePlanVo"/>
+        <where>
+            <if test="planCode != null and planCode != ''"> and plan_code like concat('%', #{planCode}, '%')</if>
+            <if test="planName != null and planName != ''"> and plan_name like concat('%', #{planName}, '%')</if>
+            <if test="planType != null and planType != ''"> and plan_type like concat('%', #{planType}, '%')</if>
+            <if test="planStatus != null and planStatus != ''"> and plan_status like concat('%', #{planStatus}, '%')</if>
+            <if test="activeFlag != null and activeFlag != ''"> and active_flag like concat('%', #{activeFlag}, '%')</if>
+        </where>
+    </select>
+
+    <select id="selectApsSchedulePlanById" parameterType="Long" resultMap="ApsSchedulePlanResult">
+        <include refid="selectApsSchedulePlanVo"/>
+        where plan_id = #{planId}
+    </select>
+
+    <select id="selectActiveInitialPlan" resultMap="ApsSchedulePlanResult">
+        <include refid="selectApsSchedulePlanVo"/>
+        where plan_type = 'INITIAL'
+          and active_flag = 'Y'
+          and (del_flag = '0' or del_flag is null)
+        order by plan_id desc
+        limit 1
+    </select>
+
+    <insert id="insertApsSchedulePlan" parameterType="com.ruoyi.aps.domain.ApsSchedulePlan" useGeneratedKeys="true" keyProperty="planId">
+        insert into aps_schedule_plan
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="planCode != null">plan_code,</if>
+            <if test="planName != null">plan_name,</if>
+            <if test="planType != null">plan_type,</if>
+            <if test="planStatus != null">plan_status,</if>
+            <if test="sourcePlanId != null">source_plan_id,</if>
+            <if test="eventId != null">event_id,</if>
+            <if test="algorithmName != null">algorithm_name,</if>
+            <if test="strategyType != null">strategy_type,</if>
+            <if test="scheduleStartTime != null">schedule_start_time,</if>
+            <if test="scheduleEndTime != null">schedule_end_time,</if>
+            <if test="kpiJson != null">kpi_json,</if>
+            <if test="aiExplanation != null">ai_explanation,</if>
+            <if test="activeFlag != null">active_flag,</if>
+            <if test="delFlag != null">del_flag,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="planCode != null">#{planCode},</if>
+            <if test="planName != null">#{planName},</if>
+            <if test="planType != null">#{planType},</if>
+            <if test="planStatus != null">#{planStatus},</if>
+            <if test="sourcePlanId != null">#{sourcePlanId},</if>
+            <if test="eventId != null">#{eventId},</if>
+            <if test="algorithmName != null">#{algorithmName},</if>
+            <if test="strategyType != null">#{strategyType},</if>
+            <if test="scheduleStartTime != null">#{scheduleStartTime},</if>
+            <if test="scheduleEndTime != null">#{scheduleEndTime},</if>
+            <if test="kpiJson != null">#{kpiJson},</if>
+            <if test="aiExplanation != null">#{aiExplanation},</if>
+            <if test="activeFlag != null">#{activeFlag},</if>
+            <if test="delFlag != null">#{delFlag},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateApsSchedulePlan" parameterType="com.ruoyi.aps.domain.ApsSchedulePlan">
+        update aps_schedule_plan
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="planCode != null">plan_code = #{planCode},</if>
+            <if test="planName != null">plan_name = #{planName},</if>
+            <if test="planType != null">plan_type = #{planType},</if>
+            <if test="planStatus != null">plan_status = #{planStatus},</if>
+            <if test="sourcePlanId != null">source_plan_id = #{sourcePlanId},</if>
+            <if test="eventId != null">event_id = #{eventId},</if>
+            <if test="algorithmName != null">algorithm_name = #{algorithmName},</if>
+            <if test="strategyType != null">strategy_type = #{strategyType},</if>
+            <if test="scheduleStartTime != null">schedule_start_time = #{scheduleStartTime},</if>
+            <if test="scheduleEndTime != null">schedule_end_time = #{scheduleEndTime},</if>
+            <if test="kpiJson != null">kpi_json = #{kpiJson},</if>
+            <if test="aiExplanation != null">ai_explanation = #{aiExplanation},</if>
+            <if test="activeFlag != null">active_flag = #{activeFlag},</if>
+            <if test="delFlag != null">del_flag = #{delFlag},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </trim>
+        where plan_id = #{planId}
+    </update>
+
+    <delete id="deleteApsSchedulePlanById" parameterType="Long">
+        delete from aps_schedule_plan where plan_id = #{planId}
+    </delete>
+
+    <delete id="deleteApsSchedulePlanByIds" parameterType="Long">
+        delete from aps_schedule_plan where plan_id in
+        <foreach item="planId" collection="array" open="(" separator="," close=")">
+            #{planId}
+        </foreach>
+    </delete>
+
+    <update id="archiveActiveInitialPlans">
+        update aps_schedule_plan
+        set active_flag = 'N',
+            plan_status = 'HISTORY',
+            update_time = sysdate()
+        where plan_type = 'INITIAL'
+          and active_flag = 'Y'
+    </update>
+</mapper>

@@ -88,6 +88,19 @@ export const constantRoutes = [
     ]
   },
   {
+    path: '/aps/rescheduleWorkbench',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/aps/rescheduleWorkbench/index'),
+        name: 'RescheduleWorkbench',
+        meta: { title: '插单重调度工作台', activeMenu: '/aps/rescheduleWorkbench' }
+      }
+    ]
+  },
+  {
     path: '',
     component: Layout,
     redirect: 'index',

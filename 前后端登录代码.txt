@@ -54,3 +54,7 @@ redis
   http://localhost:80
 
   建议顺序：Redis -> Python算法服务 -> 若依后端 -> 若依前端。
+
+git add .
+git commit -m "说明修改内容"
+git push

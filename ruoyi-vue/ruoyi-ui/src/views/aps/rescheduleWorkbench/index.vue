@@ -77,6 +77,16 @@
                 <el-radio-button label="GA">GA</el-radio-button>
               </el-radio-group>
             </el-form-item>
+            <el-form-item v-if="algorithmType === 'GA'" label="randomSeed">
+              <el-input-number
+                v-model="randomSeed"
+                :min="0"
+                :step="1"
+                :precision="0"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </el-form-item>
           </el-form>
 
           <el-descriptions v-if="selectedProduct" :column="1" border size="small" class="section-gap">
@@ -342,6 +352,7 @@ export default {
       selectedHotLotId: null,
       sourcePlanId: null,
       algorithmType: "RULE",
+      randomSeed: 42,
       workbenchStage: STAGE.EMPTY,
       sourcePlan: null,
       insertEvent: null,
@@ -616,7 +627,7 @@ export default {
     },
     handleGenerateLocalReschedule() {
       this.rescheduleLoading = true;
-      generateLocalReschedule(this.insertEvent.eventId, this.algorithmType).then(response => {
+      generateLocalReschedule(this.insertEvent.eventId, this.algorithmType, this.randomSeed).then(response => {
         const data = response.data || {};
         this.$modal.msgSuccess("局部重调度候选方案已生成");
         return this.afterRescheduleGenerated(data);
@@ -723,6 +734,7 @@ export default {
       this.selectedHotLotId = null;
       this.sourcePlanId = null;
       this.algorithmType = "RULE";
+      this.randomSeed = 42;
       this.routeOperationList = [];
       this.hotLotList = [];
       this.sourcePlan = null;

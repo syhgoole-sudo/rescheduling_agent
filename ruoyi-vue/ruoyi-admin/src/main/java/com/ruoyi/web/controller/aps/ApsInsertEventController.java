@@ -92,8 +92,19 @@ public class ApsInsertEventController extends BaseController
     public AjaxResult generateLocalReschedule(@PathVariable("eventId") Long eventId, @RequestBody(required = false) Map<String, Object> body)
     {
         String algorithmType = body == null || body.get("algorithmType") == null ? "RULE" : body.get("algorithmType").toString();
+        Integer randomSeed = parseRandomSeed(body == null ? null : body.get("randomSeed"));
         Map<String, Object> result = apsInsertEventService.generateLocalReschedule(eventId, getUsername(), algorithmType);
+        result.putIfAbsent("randomSeed", randomSeed);
         return AjaxResult.success(result);
+    }
+
+    private Integer parseRandomSeed(Object value)
+    {
+        if (value == null || value.toString().trim().isEmpty())
+        {
+            return 42;
+        }
+        return Integer.valueOf(value.toString());
     }
 
     @PreAuthorize("@ss.hasPermi('aps:insertEvent:list')")

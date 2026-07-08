@@ -246,12 +246,19 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> generateLocalReschedule(Long eventId, String operatorName)
     {
-        return generateLocalReschedule(eventId, operatorName, "RULE");
+        return generateLocalReschedule(eventId, operatorName, "RULE", 42);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> generateLocalReschedule(Long eventId, String operatorName, String algorithmType)
+    {
+        return generateLocalReschedule(eventId, operatorName, algorithmType, 42);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> generateLocalReschedule(Long eventId, String operatorName, String algorithmType, Integer randomSeed)
     {
         ApsInsertEvent event = apsInsertEventMapper.selectApsInsertEventById(eventId);
         if (event == null)
@@ -277,7 +284,12 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         {
             throw new IllegalStateException("Please recommend strategy before generating local reschedule plan.");
         }
-        strategy.put("algorithmType", normalizeAlgorithmType(algorithmType));
+        String normalizedAlgorithmType = normalizeAlgorithmType(algorithmType);
+        strategy.put("algorithmType", normalizedAlgorithmType);
+        if ("GA".equals(normalizedAlgorithmType))
+        {
+            strategy.put("randomSeed", randomSeed == null ? 42 : randomSeed);
+        }
         Set<Long> affectedTaskIds = parseLongSet(impact.get("affectedTaskIds"));
 
         ApsSchedulePlan sourcePlan = apsSchedulePlanMapper.selectApsSchedulePlanById(event.getSourcePlanId());
@@ -329,6 +341,14 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         {
             throw new IllegalStateException("Python local reschedule service did not return task schedules.");
         }
+        if ("GA".equals(normalizedAlgorithmType))
+        {
+            if (response.getKpi() == null)
+            {
+                response.setKpi(new LinkedHashMap<>());
+            }
+            response.getKpi().putIfAbsent("randomSeed", strategy.get("randomSeed"));
+        }
 
         ApsSchedulePlan newPlan = buildReschedulePlan(sourcePlan, event, response, scheduleStartTime, operatorName);
         apsSchedulePlanMapper.insertApsSchedulePlan(newPlan);
@@ -350,6 +370,10 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         result.put("eventId", event.getEventId());
         result.put("taskCount", response.getTaskSchedules().size());
         result.put("kpi", response.getKpi());
+        if ("GA".equals(normalizedAlgorithmType))
+        {
+            result.put("randomSeed", strategy.get("randomSeed"));
+        }
         result.put("warnings", response.getWarnings());
         return result;
     }
@@ -733,6 +757,10 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         plan.setActiveFlag("N");
         plan.setDelFlag("0");
         plan.setCreateBy(operatorName);
+        if (response.getKpi() != null && response.getKpi().get("randomSeed") != null)
+        {
+            plan.setRemark("GA randomSeed=" + response.getKpi().get("randomSeed"));
+        }
         return plan;
     }
 

@@ -113,6 +113,16 @@
             <el-radio label="GA">遗传算法</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item v-if="selectedAlgorithmType === 'GA'" label="randomSeed">
+          <el-input-number
+            v-model="selectedRandomSeed"
+            :min="0"
+            :step="1"
+            :precision="0"
+            controls-position="right"
+            style="width: 100%"
+          />
+        </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
         <el-button type="primary" @click="submitLocalReschedule">确 定</el-button>
@@ -231,6 +241,7 @@ export default {
       analyzeInsertOrderId: null,
       pendingRescheduleEvent: null,
       selectedAlgorithmType: "RULE",
+      selectedRandomSeed: 42,
       aiExplanationLoading: null,
       impactDetail: null,
       strategyDetail: null,
@@ -335,6 +346,7 @@ export default {
     handleGenerateLocalReschedule(row) {
       this.pendingRescheduleEvent = row;
       this.selectedAlgorithmType = "RULE";
+      this.selectedRandomSeed = 42;
       this.algorithmOpen = true;
     },
     submitLocalReschedule() {
@@ -345,7 +357,7 @@ export default {
       }
       const algorithmType = this.selectedAlgorithmType || "RULE";
       this.$modal.confirm('确认基于事件 "' + row.eventCode + '" 使用 ' + (algorithmType === "GA" ? "遗传算法" : "规则算法") + ' 生成局部重调度方案？').then(() => {
-        return generateLocalReschedule(row.eventId, algorithmType);
+        return generateLocalReschedule(row.eventId, algorithmType, this.selectedRandomSeed);
       }).then(response => {
         this.algorithmOpen = false;
         this.rescheduleDetail = response.data;

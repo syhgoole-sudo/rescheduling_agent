@@ -37,12 +37,14 @@ export function recommendStrategy(eventId) {
   })
 }
 
-export function generateLocalReschedule(eventId, algorithmType) {
+export function generateLocalReschedule(eventId, algorithmType, randomSeed) {
+  const seed = randomSeed === undefined || randomSeed === null || randomSeed === '' ? 42 : randomSeed
   return request({
     url: '/aps/insertEvent/generateLocalReschedule/' + eventId,
     method: 'post',
     data: {
-      algorithmType: algorithmType || 'RULE'
+      algorithmType: algorithmType || 'RULE',
+      randomSeed: algorithmType === 'GA' ? seed : undefined
     }
   })
 }

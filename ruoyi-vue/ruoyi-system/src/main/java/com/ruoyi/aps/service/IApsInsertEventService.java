@@ -31,6 +31,8 @@ public interface IApsInsertEventService
 
     public Map<String, Object> generateLocalReschedule(Long eventId, String operatorName, String algorithmType);
 
+    public Map<String, Object> generateLocalReschedule(Long eventId, String operatorName, String algorithmType, Integer randomSeed);
+
     public Map<String, Object> generateExplanationReport(Long eventId, String operatorName);
 
     public Map<String, Object> generateAiExplanationReport(Long eventId, String operatorName);

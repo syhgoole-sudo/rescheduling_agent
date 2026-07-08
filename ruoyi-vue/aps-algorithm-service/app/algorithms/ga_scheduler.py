@@ -15,15 +15,19 @@ TOURNAMENT_SIZE = 3
 def local_reschedule_by_ga(request: LocalRescheduleRequest) -> Tuple[List[TaskScheduleDTO], Dict[str, Any], List[str]]:
     chromosome_seed = build_order_sequence_rule(request)
     if len(chromosome_seed) <= 1:
-        return decode_local_reschedule(request, chromosome_seed)
+        tasks, kpi, warnings = decode_local_reschedule(request, chromosome_seed)
+        kpi["randomSeed"] = _resolve_random_seed(request.strategyConfig or {})
+        return tasks, kpi, warnings
 
     config = request.strategyConfig or {}
+    random_seed = _resolve_random_seed(config)
+    rng = random.Random(random_seed)
     population_size = int(config.get("populationSize", DEFAULT_POPULATION_SIZE))
     generations = int(config.get("generations", DEFAULT_GENERATIONS))
     crossover_rate = float(config.get("crossoverRate", DEFAULT_CROSSOVER_RATE))
     mutation_rate = float(config.get("mutationRate", DEFAULT_MUTATION_RATE))
 
-    population = _initial_population(chromosome_seed, population_size)
+    population = _initial_population(chromosome_seed, population_size, rng)
     best_chromosome = population[0][:]
     best_score = _fitness(request, best_chromosome)
 
@@ -35,31 +39,37 @@ def local_reschedule_by_ga(request: LocalRescheduleRequest) -> Tuple[List[TaskSc
 
         next_population = [best_chromosome[:]]
         while len(next_population) < population_size:
-            parent_a = _tournament_select(scored)
-            parent_b = _tournament_select(scored)
-            if random.random() < crossover_rate:
-                child_a, child_b = _order_crossover(parent_a, parent_b)
+            parent_a = _tournament_select(scored, rng)
+            parent_b = _tournament_select(scored, rng)
+            if rng.random() < crossover_rate:
+                child_a, child_b = _order_crossover(parent_a, parent_b, rng)
             else:
                 child_a, child_b = parent_a[:], parent_b[:]
-            if random.random() < mutation_rate:
-                _swap_mutation(child_a)
-            if random.random() < mutation_rate:
-                _swap_mutation(child_b)
+            if rng.random() < mutation_rate:
+                _swap_mutation(child_a, rng)
+            if rng.random() < mutation_rate:
+                _swap_mutation(child_b, rng)
             next_population.append(child_a)
             if len(next_population) < population_size:
                 next_population.append(child_b)
         population = next_population
 
     tasks, kpi, warnings = decode_local_reschedule(request, best_chromosome)
+    kpi["randomSeed"] = random_seed
     warnings.append(f"GA best fitness: {round(best_score, 4)}.")
     return tasks, kpi, warnings
 
 
-def _initial_population(seed: List[int], population_size: int) -> List[List[int]]:
+def _resolve_random_seed(config: Dict[str, Any]) -> int:
+    value = config.get("randomSeed", 42)
+    return 42 if value is None or value == "" else int(value)
+
+
+def _initial_population(seed: List[int], population_size: int, rng: random.Random) -> List[List[int]]:
     population = [seed[:]]
     while len(population) < population_size:
         chromosome = seed[:]
-        random.shuffle(chromosome)
+        rng.shuffle(chromosome)
         population.append(chromosome)
     return population
 
@@ -78,15 +88,15 @@ def _fitness(request: LocalRescheduleRequest, chromosome: List[int]) -> float:
     )
 
 
-def _tournament_select(scored_population: List[Tuple[float, List[int]]]) -> List[int]:
-    contenders = random.sample(scored_population, min(TOURNAMENT_SIZE, len(scored_population)))
+def _tournament_select(scored_population: List[Tuple[float, List[int]]], rng: random.Random) -> List[int]:
+    contenders = rng.sample(scored_population, min(TOURNAMENT_SIZE, len(scored_population)))
     contenders.sort(key=lambda item: item[0])
     return contenders[0][1][:]
 
 
-def _order_crossover(parent_a: List[int], parent_b: List[int]) -> Tuple[List[int], List[int]]:
+def _order_crossover(parent_a: List[int], parent_b: List[int], rng: random.Random) -> Tuple[List[int], List[int]]:
     size = len(parent_a)
-    start, end = sorted(random.sample(range(size), 2))
+    start, end = sorted(rng.sample(range(size), 2))
     return (
         _make_ox_child(parent_a, parent_b, start, end),
         _make_ox_child(parent_b, parent_a, start, end),
@@ -105,8 +115,8 @@ def _make_ox_child(primary: List[int], secondary: List[int], start: int, end: in
     return child
 
 
-def _swap_mutation(chromosome: List[int]) -> None:
+def _swap_mutation(chromosome: List[int], rng: random.Random) -> None:
     if len(chromosome) < 2:
         return
-    a, b = random.sample(range(len(chromosome)), 2)
+    a, b = rng.sample(range(len(chromosome)), 2)
     chromosome[a], chromosome[b] = chromosome[b], chromosome[a]

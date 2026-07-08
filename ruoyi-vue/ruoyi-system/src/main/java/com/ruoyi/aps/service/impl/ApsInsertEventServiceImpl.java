@@ -126,9 +126,12 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
                 .map(ApsRouteOperation::getEquipmentGroupId)
                 .filter(item -> item != null)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+        Date impactWindowStart = insertOrder.getReleaseTime() == null ? DateUtils.getNowDate() : insertOrder.getReleaseTime();
+        Date impactWindowEnd = insertOrder.getDueTime() == null ? DateUtils.addHours(impactWindowStart, 24) : insertOrder.getDueTime();
         List<ApsScheduleTask> affectedTasks = equipmentGroupIds.isEmpty()
                 ? new ArrayList<>()
-                : apsScheduleTaskMapper.selectAffectedTasks(activePlan.getPlanId(), insertOrder.getReleaseTime(), new ArrayList<>(equipmentGroupIds));
+                : apsScheduleTaskMapper.selectAffectedTasks(activePlan.getPlanId(), impactWindowStart,
+                        impactWindowEnd, new ArrayList<>(equipmentGroupIds));
 
         Set<Long> affectedTaskIds = affectedTasks.stream()
                 .map(ApsScheduleTask::getTaskId)
@@ -144,7 +147,8 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
 
         String impactLevel = calculateImpactLevel(affectedTasks.size());
         Map<String, Object> impact = buildImpactJson(insertOrder, equipmentGroupIds, affectedEquipmentIds,
-                affectedOrderIds, affectedTaskIds, affectedTasks.size(), impactLevel);
+                affectedOrderIds, affectedTaskIds, affectedTasks.size(), impactLevel,
+                impactWindowStart, impactWindowEnd);
 
         ApsInsertEvent event = new ApsInsertEvent();
         event.setEventCode("IE-" + DateUtils.dateTimeNow());
@@ -168,6 +172,10 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         result.put("affectedTaskCount", affectedTasks.size());
         result.put("affectedOrderCount", affectedOrderIds.size());
         result.put("affectedEquipmentCount", affectedEquipmentIds.size());
+        result.put("overlapTaskCount", affectedTasks.size());
+        result.put("impactWindowStart", formatDate(impactWindowStart));
+        result.put("impactWindowEnd", formatDate(impactWindowEnd));
+        result.put("impactRule", "TIME_WINDOW_INTERSECTION");
         result.put("impactJson", event.getImpactJson());
         return result;
     }
@@ -408,7 +416,8 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         double changedTaskRatio = getDouble(summary, "changedTaskRatio");
 
         String eventSummary = buildEventSummary(insertOrder, event);
-        String impactSummary = "系统识别出受影响任务 " + impact.getIntValue("affectedTaskCount")
+        String impactSummary = "系统基于插单 lot 的释放时间、交期窗口以及所需设备组，采用时间窗相交规则识别受影响任务；"
+                + "识别出受影响任务 " + impact.getIntValue("affectedTaskCount")
                 + " 个、受影响订单 " + impact.getIntValue("affectedOrderCount")
                 + " 个、受影响设备 " + impact.getIntValue("affectedEquipmentCount")
                 + " 台，影响等级为 " + defaultText(impact.getString("impactLevel"), "UNKNOWN") + "。";
@@ -788,21 +797,25 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
     private Map<String, Object> buildImpactJson(ApsOrder insertOrder,
             Set<Long> equipmentGroupIds, Set<Long> affectedEquipmentIds,
             Set<Long> affectedOrderIds, Set<Long> affectedTaskIds,
-            int affectedTaskCount, String impactLevel)
+            int affectedTaskCount, String impactLevel, Date impactWindowStart, Date impactWindowEnd)
     {
         Map<String, Object> impact = new LinkedHashMap<>();
         impact.put("impactLevel", impactLevel);
-        impact.put("windowStart", formatDate(insertOrder.getReleaseTime()));
-        impact.put("windowEnd", formatDate(insertOrder.getDueTime()));
+        impact.put("windowStart", formatDate(impactWindowStart));
+        impact.put("windowEnd", formatDate(impactWindowEnd));
+        impact.put("impactWindowStart", formatDate(impactWindowStart));
+        impact.put("impactWindowEnd", formatDate(impactWindowEnd));
+        impact.put("impactRule", "TIME_WINDOW_INTERSECTION");
         impact.put("insertOrder", buildInsertOrderJson(insertOrder));
         impact.put("affectedEquipmentGroupIds", new ArrayList<>(equipmentGroupIds));
         impact.put("affectedEquipmentIds", new ArrayList<>(affectedEquipmentIds));
         impact.put("affectedOrderIds", new ArrayList<>(affectedOrderIds));
         impact.put("affectedTaskIds", new ArrayList<>(affectedTaskIds));
+        impact.put("overlapTaskCount", affectedTaskCount);
         impact.put("affectedTaskCount", affectedTaskCount);
         impact.put("affectedOrderCount", affectedOrderIds.size());
         impact.put("affectedEquipmentCount", affectedEquipmentIds.size());
-        impact.put("reason", "插单产品工艺路线需要占用相关设备组，当前方案中这些设备组在插单释放时间之后存在未冻结任务，因此判定为受影响任务。");
+        impact.put("reason", "系统基于插单 lot 的释放时间、交期窗口以及所需设备组，采用时间窗相交规则识别受影响任务。");
         return impact;
     }
 

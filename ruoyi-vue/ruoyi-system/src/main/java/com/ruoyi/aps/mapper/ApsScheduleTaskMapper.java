@@ -19,7 +19,8 @@ public interface ApsScheduleTaskMapper
     public List<ApsScheduleTask> selectApsScheduleTaskListByPlanId(Long planId);
 
     public List<ApsScheduleTask> selectAffectedTasks(@Param("planId") Long planId,
-            @Param("releaseTime") Date releaseTime,
+            @Param("impactWindowStart") Date impactWindowStart,
+            @Param("impactWindowEnd") Date impactWindowEnd,
             @Param("equipmentGroupIds") List<Long> equipmentGroupIds);
 
     public int insertApsScheduleTask(ApsScheduleTask apsScheduleTask);

@@ -67,8 +67,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectAffectedTasks" resultMap="ApsScheduleTaskResult">
         <include refid="selectApsScheduleTaskVo"/>
         where plan_id = #{planId}
-          and planned_start_time &gt;= #{releaseTime}
-          and (is_frozen = 'N' or is_frozen is null)
+          and planned_start_time is not null
+          and planned_end_time is not null
+          and planned_start_time &lt; #{impactWindowEnd}
+          and planned_end_time &gt; #{impactWindowStart}
+          and (task_status is null or task_status not in ('COMPLETED', 'FINISHED', 'DONE', 'CANCELLED'))
           and (del_flag = '0' or del_flag is null)
           <if test="equipmentGroupIds != null and equipmentGroupIds.size() > 0">
               and equipment_group_id in

@@ -389,16 +389,21 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         Map<String, Object> compare = apsSchedulePlanService.compareReschedulePlan(newPlan.getPlanId());
 
         Map<String, Object> summary = getMap(compare, "summary");
-        Map<String, Object> delayCompare = getMap(compare, "delayCompare");
+        Map<String, Object> trueDelayCompare = getMap(compare, "trueDelayCompare");
+        Map<String, Object> stabilityCompare = getMap(compare, "stabilityCompare");
         Map<String, Object> makespanCompare = getMap(compare, "makespanCompare");
         Map<String, Object> insertOrderCompare = getMap(compare, "insertOrderCompare");
 
-        long insertDelayMinutes = getLong(insertOrderCompare, "insertOrderDelayMinutes");
-        long originalDelayOrderCount = getLong(delayCompare, "originalDelayOrderCount");
-        long newDelayOrderCount = getLong(delayCompare, "newDelayOrderCount");
-        long delayOrderCountDiff = getLong(delayCompare, "delayOrderCountDiff");
-        long totalDelayMinutesDiff = getLong(delayCompare, "totalDelayMinutesDiff");
-        long maxDelayMinutesDiff = getLong(delayCompare, "maxDelayMinutesDiff");
+        long insertDelayMinutes = getLong(insertOrderCompare, "insertOrderTrueDelayMinutes");
+        long originalDelayOrderCount = getLong(trueDelayCompare, "originalTrueDelayOrderCount");
+        long newDelayOrderCount = getLong(trueDelayCompare, "newTrueDelayOrderCount");
+        long delayOrderCountDiff = getLong(trueDelayCompare, "trueDelayOrderCountDiff");
+        long totalDelayMinutesDiff = getLong(trueDelayCompare, "trueTotalDelayMinutesDiff");
+        long maxDelayMinutesDiff = getLong(trueDelayCompare, "trueMaxDelayMinutesDiff");
+        long stabilityDelayOrderCount = getLong(stabilityCompare, "stabilityDelayOrderCount");
+        long stabilityTotalDelayMinutes = getLong(stabilityCompare, "stabilityTotalDelayMinutes");
+        long stabilityMaxDelayMinutes = getLong(stabilityCompare, "stabilityMaxDelayMinutes");
+        double averageStabilityDelayMinutes = getDouble(stabilityCompare, "averageStabilityDelayMinutes");
         long makespanDiffMinutes = getLong(makespanCompare, "makespanDiffMinutes");
         double changedTaskRatio = getDouble(summary, "changedTaskRatio");
 
@@ -415,11 +420,15 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
                 + " 个、冻结任务 " + getLong(summary, "frozenTaskCount")
                 + " 个、变更任务 " + getLong(summary, "changedTaskCount")
                 + " 个，变更比例为 " + changedTaskRatio + "。";
-        String kpiSummary = "KPI 对比显示，延期订单数由 " + originalDelayOrderCount + " 变为 " + newDelayOrderCount
+        String kpiSummary = "从真实交期看，延期 lot 数由 " + originalDelayOrderCount + " 变为 " + newDelayOrderCount
                 + "，变化 " + delayOrderCountDiff
-                + "；总延期分钟变化 " + totalDelayMinutesDiff
-                + "；最大延期分钟变化 " + maxDelayMinutesDiff
-                + "；整体完工时间变化 " + makespanDiffMinutes + " 分钟。";
+                + "；真实总延期分钟变化 " + totalDelayMinutesDiff
+                + "；真实最大延期分钟变化 " + maxDelayMinutesDiff
+                + "；插单 lot 真实延期 " + insertDelayMinutes + " 分钟。从计划稳定性看，后移 lot 数 "
+                + stabilityDelayOrderCount + "，总后移 " + stabilityTotalDelayMinutes
+                + " 分钟，最大后移 " + stabilityMaxDelayMinutes
+                + " 分钟，平均后移 " + averageStabilityDelayMinutes
+                + " 分钟。整体完工时间变化 " + makespanDiffMinutes + " 分钟。";
         String benefit = buildBenefit(insertDelayMinutes, delayOrderCountDiff, totalDelayMinutesDiff);
         String cost = buildCost(makespanDiffMinutes, changedTaskRatio, getLong(summary, "changedTaskCount"));
         String recommendation = buildExplanationRecommendation(insertDelayMinutes, newDelayOrderCount,
@@ -634,6 +643,8 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         dto.setOriginalStartTime(formatDate(task.getPlannedStartTime()));
         dto.setOriginalEndTime(formatDate(task.getPlannedEndTime()));
         dto.setOriginalEquipmentId(task.getEquipmentId());
+        ApsOrder order = task.getOrderId() == null ? null : apsOrderMapper.selectApsOrderById(task.getOrderId());
+        dto.setDueTime(order == null ? null : formatDate(order.getDueTime()));
         return dto;
     }
 
@@ -942,19 +953,18 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         List<String> benefits = new ArrayList<>();
         if (insertDelayMinutes == 0)
         {
-            benefits.add("插单订单可按期完成");
+            benefits.add("插单 lot 可按真实交期完成");
         }
         if (delayOrderCountDiff <= 0)
         {
-            benefits.add("未增加延期订单数");
+            benefits.add("未增加真实延期 lot 数");
         }
         if (totalDelayMinutesDiff <= 0)
         {
-            benefits.add("未增加总延期时间");
+            benefits.add("未增加真实总延期时间");
         }
-        return benefits.isEmpty() ? "新方案未表现出明显 KPI 收益。" : String.join("，", benefits) + "。";
+        return benefits.isEmpty() ? "新方案未表现出明显真实交期收益。" : String.join("；", benefits) + "。";
     }
-
     private String buildCost(long makespanDiffMinutes, double changedTaskRatio, long changedTaskCount)
     {
         List<String> costs = new ArrayList<>();
@@ -978,19 +988,18 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
     {
         if (insertDelayMinutes > 0)
         {
-            return "谨慎采用。插单订单仍存在延期，建议调度员结合交期承诺和现场资源再确认。";
+            return "谨慎采用。插单 lot 相对真实交期仍存在延期，建议调度员结合交期承诺和现场资源再确认。";
         }
         if (newDelayOrderCount > originalDelayOrderCount)
         {
-            return "谨慎采用。新方案导致更多订单延期，需要评估对原有订单承诺的影响。";
+            return "谨慎采用。新方案导致更多 lot 违反真实交期，需要评估对原有订单承诺的影响。";
         }
         if (makespanDiffMinutes > 0 || changedTaskRatio > 0.5D)
         {
-            return "建议采用，但需关注计划扰动。新方案保障插单订单按期完成，但整体完工时间或任务变更比例有所增加。";
+            return "建议采用，但需关注计划稳定性扰动。新方案保障插单 lot 按真实交期完成，但整体完工时间或任务变更比例有所增加。";
         }
-        return "建议采用。新方案保障插单订单按期完成，且未增加延期订单数。";
+        return "建议采用。新方案保障插单 lot 按真实交期完成，且未增加真实延期 lot 数。";
     }
-
     private String formatDate(Date date)
     {
         return date == null ? null : DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM_SS, date);

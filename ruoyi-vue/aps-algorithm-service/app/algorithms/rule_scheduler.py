@@ -2,6 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
+from app.algorithms.kpi_calculator import calculate_local_reschedule_kpi
 from app.schemas.schedule_schema import InitialScheduleRequest, LocalRescheduleRequest, TaskScheduleDTO
 
 
@@ -159,6 +160,7 @@ def local_reschedule_by_rule(request: LocalRescheduleRequest) -> Tuple[List[Task
             "original_start_time": None,
             "original_end_time": None,
             "original_equipment_id": None,
+            "due_time": request.insertOrder.dueTime,
         })
 
     adjustable_sorted = sorted(
@@ -184,6 +186,7 @@ def local_reschedule_by_rule(request: LocalRescheduleRequest) -> Tuple[List[Task
             "original_start_time": task.originalStartTime or task.plannedStartTime,
             "original_end_time": task.originalEndTime or task.plannedEndTime,
             "original_equipment_id": task.originalEquipmentId or task.equipmentId,
+            "due_time": task.dueTime,
         })
 
     pending_tasks.sort(key=lambda item: (item["priority"], item["order_id"], item["process_seq"]))
@@ -229,12 +232,13 @@ def local_reschedule_by_rule(request: LocalRescheduleRequest) -> Tuple[List[Task
             originalStartTime=task["original_start_time"],
             originalEndTime=task["original_end_time"],
             originalEquipmentId=task["original_equipment_id"],
+            dueTime=_format_time(task["due_time"]) if isinstance(task["due_time"], datetime) else task["due_time"],
         ))
 
         equipment_available_time[selected.equipmentId] = planned_end
         order_ready_time[task["order_id"]] = planned_end
 
-    kpi = _calculate_reschedule_kpi(request, task_schedules)
+    kpi = calculate_local_reschedule_kpi(request, task_schedules)
     task_schedules.sort(key=lambda item: (item.equipmentId, item.plannedStartTime, item.processSeq))
     return task_schedules, kpi, warnings
 
@@ -243,54 +247,3 @@ def _parse_task_time(value: str) -> datetime:
     if isinstance(value, datetime):
         return value
     return datetime.strptime(value, DATETIME_FORMAT)
-
-
-def _calculate_reschedule_kpi(request: LocalRescheduleRequest, tasks: List[TaskScheduleDTO]) -> Dict[str, Any]:
-    if not tasks:
-        return {
-            "makespan": 0,
-            "delayOrderCount": 0,
-            "totalDelayMinutes": 0,
-            "maxDelayMinutes": 0,
-            "changedTaskCount": 0,
-            "changedTaskRatio": 0,
-            "insertOrderFinishTime": None,
-            "insertOrderDelayMinutes": 0,
-            "scheduledTaskCount": 0,
-        }
-
-    max_end = max(_parse_task_time(task.plannedEndTime) for task in tasks)
-    makespan = int((max_end - request.scheduleStartTime).total_seconds() // 60)
-    changed_count = sum(1 for task in tasks if task.isChanged == "Y")
-
-    finish_by_order: Dict[int, datetime] = {}
-    for task in tasks:
-        finish_by_order[task.orderId] = max(
-            finish_by_order.get(task.orderId, request.scheduleStartTime),
-            _parse_task_time(task.plannedEndTime),
-        )
-
-    delay_minutes: List[int] = []
-    insert_finish_time = finish_by_order.get(request.insertOrder.orderId)
-    for order_id, finish_time in finish_by_order.items():
-        if order_id == request.insertOrder.orderId:
-            due_time = request.insertOrder.dueTime
-        else:
-            due_time = finish_time
-        delay_minutes.append(max(0, int((finish_time - due_time).total_seconds() // 60)))
-
-    insert_delay = 0
-    if insert_finish_time is not None:
-        insert_delay = max(0, int((insert_finish_time - request.insertOrder.dueTime).total_seconds() // 60))
-
-    return {
-        "makespan": makespan,
-        "delayOrderCount": sum(1 for item in delay_minutes if item > 0),
-        "totalDelayMinutes": sum(delay_minutes),
-        "maxDelayMinutes": max(delay_minutes) if delay_minutes else 0,
-        "changedTaskCount": changed_count,
-        "changedTaskRatio": round(changed_count / len(tasks), 4),
-        "insertOrderFinishTime": _format_time(insert_finish_time) if insert_finish_time else None,
-        "insertOrderDelayMinutes": insert_delay,
-        "scheduledTaskCount": len(tasks),
-    }

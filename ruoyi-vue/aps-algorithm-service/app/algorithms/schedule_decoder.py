@@ -2,6 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
+from app.algorithms.kpi_calculator import calculate_local_reschedule_kpi
 from app.schemas.schedule_schema import LocalRescheduleRequest, TaskScheduleDTO
 
 
@@ -47,7 +48,6 @@ def decode_local_reschedule(
     }
     order_ready_time: Dict[int, datetime] = {}
 
-    original_finish_by_order: Dict[int, datetime] = {}
     for task in request.frozenTasks:
         start = parse_time(task.plannedStartTime)
         end = parse_time(task.plannedEndTime)
@@ -80,6 +80,7 @@ def decode_local_reschedule(
             "original_start_time": None,
             "original_end_time": None,
             "original_equipment_id": None,
+            "due_time": request.insertOrder.dueTime,
         })
 
     for task in sorted(request.adjustableTasks, key=lambda item: (item.orderId, item.processSeq)):
@@ -102,11 +103,8 @@ def decode_local_reschedule(
             "original_start_time": original_start,
             "original_end_time": original_end,
             "original_equipment_id": original_equipment_id,
+            "due_time": task.dueTime,
         })
-        original_finish_by_order[task.orderId] = max(
-            original_finish_by_order.get(task.orderId, parse_time(original_end)),
-            parse_time(original_end),
-        )
 
     seen = set()
     normalized_sequence = []
@@ -168,69 +166,12 @@ def decode_local_reschedule(
                 originalStartTime=task["original_start_time"],
                 originalEndTime=task["original_end_time"],
                 originalEquipmentId=task["original_equipment_id"],
+                dueTime=format_time(task["due_time"]) if isinstance(task["due_time"], datetime) else task["due_time"],
             ))
 
             equipment_available_time[selected.equipmentId] = planned_end
             order_ready_time[task["order_id"]] = planned_end
 
-    kpi = calculate_reschedule_kpi(request, task_schedules, original_finish_by_order)
+    kpi = calculate_local_reschedule_kpi(request, task_schedules)
     task_schedules.sort(key=lambda item: (item.equipmentId, item.plannedStartTime, item.processSeq))
     return task_schedules, kpi, warnings
-
-
-def calculate_reschedule_kpi(
-    request: LocalRescheduleRequest,
-    tasks: List[TaskScheduleDTO],
-    original_finish_by_order: Dict[int, datetime] = None,
-) -> Dict[str, Any]:
-    original_finish_by_order = original_finish_by_order or {}
-    if not tasks:
-        return {
-            "makespan": 0,
-            "delayOrderCount": 0,
-            "totalDelayMinutes": 0,
-            "maxDelayMinutes": 0,
-            "changedTaskCount": 0,
-            "changedTaskRatio": 0,
-            "insertOrderFinishTime": None,
-            "insertOrderDelayMinutes": 0,
-            "scheduledTaskCount": 0,
-        }
-
-    max_end = max(parse_time(task.plannedEndTime) for task in tasks)
-    makespan = int((max_end - request.scheduleStartTime).total_seconds() // 60)
-    changed_count = sum(1 for task in tasks if task.isChanged == "Y")
-
-    finish_by_order: Dict[int, datetime] = {}
-    for task in tasks:
-        finish_by_order[task.orderId] = max(
-            finish_by_order.get(task.orderId, request.scheduleStartTime),
-            parse_time(task.plannedEndTime),
-        )
-
-    delay_minutes: List[int] = []
-    insert_finish_time = finish_by_order.get(request.insertOrder.orderId)
-    for order_id, finish_time in finish_by_order.items():
-        if order_id == request.insertOrder.orderId:
-            due_time = request.insertOrder.dueTime
-        elif order_id in original_finish_by_order:
-            due_time = original_finish_by_order[order_id]
-        else:
-            due_time = finish_time
-        delay_minutes.append(max(0, int((finish_time - due_time).total_seconds() // 60)))
-
-    insert_delay = 0
-    if insert_finish_time is not None:
-        insert_delay = max(0, int((insert_finish_time - request.insertOrder.dueTime).total_seconds() // 60))
-
-    return {
-        "makespan": makespan,
-        "delayOrderCount": sum(1 for item in delay_minutes if item > 0),
-        "totalDelayMinutes": sum(delay_minutes),
-        "maxDelayMinutes": max(delay_minutes) if delay_minutes else 0,
-        "changedTaskCount": changed_count,
-        "changedTaskRatio": round(changed_count / len(tasks), 4),
-        "insertOrderFinishTime": format_time(insert_finish_time) if insert_finish_time else None,
-        "insertOrderDelayMinutes": insert_delay,
-        "scheduledTaskCount": len(tasks),
-    }

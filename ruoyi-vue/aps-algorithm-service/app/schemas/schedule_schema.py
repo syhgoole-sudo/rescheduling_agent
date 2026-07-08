@@ -75,6 +75,7 @@ class TaskScheduleDTO(BaseModel):
     originalStartTime: Optional[str] = None
     originalEndTime: Optional[str] = None
     originalEquipmentId: Optional[int] = None
+    dueTime: Optional[str] = None
 
 
 class InitialScheduleResponse(BaseModel):

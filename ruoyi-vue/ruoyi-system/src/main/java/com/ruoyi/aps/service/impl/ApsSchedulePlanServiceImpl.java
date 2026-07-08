@@ -189,19 +189,21 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
         List<ApsScheduleTask> newTasks = apsScheduleTaskMapper.selectApsScheduleTaskListByPlanId(newPlan.getPlanId());
         Map<String, Object> originalKpi = calculatePlanKpi(originalTasks);
         Map<String, Object> newKpi = calculatePlanKpi(newTasks);
+        Map<Long, Date> originalFinishByOrder = calculateOrderFinishTimes(originalTasks);
+        Map<Long, Date> newFinishByOrder = calculateOrderFinishTimes(newTasks);
 
         ApsInsertEvent event = newPlan.getEventId() == null ? null : apsInsertEventMapper.selectApsInsertEventById(newPlan.getEventId());
         ApsOrder insertOrder = event == null || event.getInsertOrderId() == null ? null : apsOrderMapper.selectApsOrderById(event.getInsertOrderId());
-        Date insertFinishTime = findOrderFinishTime(newTasks, insertOrder == null ? null : insertOrder.getOrderId());
-        long insertDelayMinutes = insertOrder == null || insertFinishTime == null
+        Date insertFinishTime = insertOrder == null ? null : newFinishByOrder.get(insertOrder.getOrderId());
+        long insertOrderTrueDelayMinutes = insertOrder == null || insertFinishTime == null
                 ? 0L : Math.max(0L, minutesBetween(insertOrder.getDueTime(), insertFinishTime));
 
-        long originalDelayOrderCount = getLong(originalKpi, "delayOrderCount");
-        long newDelayOrderCount = getLong(newKpi, "delayOrderCount");
-        long originalTotalDelayMinutes = getLong(originalKpi, "totalDelayMinutes");
-        long newTotalDelayMinutes = getLong(newKpi, "totalDelayMinutes");
-        long originalMaxDelayMinutes = getLong(originalKpi, "maxDelayMinutes");
-        long newMaxDelayMinutes = getLong(newKpi, "maxDelayMinutes");
+        long originalTrueDelayOrderCount = getLong(originalKpi, "delayOrderCount");
+        long newTrueDelayOrderCount = getLong(newKpi, "delayOrderCount");
+        long originalTrueTotalDelayMinutes = getLong(originalKpi, "totalDelayMinutes");
+        long newTrueTotalDelayMinutes = getLong(newKpi, "totalDelayMinutes");
+        long originalTrueMaxDelayMinutes = getLong(originalKpi, "maxDelayMinutes");
+        long newTrueMaxDelayMinutes = getLong(newKpi, "maxDelayMinutes");
         Date originalMakespan = (Date) originalKpi.get("makespan");
         Date newMakespan = (Date) newKpi.get("makespan");
 
@@ -218,16 +220,30 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
         summary.put("insertedTaskCount", insertedTaskCount);
         summary.put("frozenTaskCount", frozenTaskCount);
 
+        Map<String, Object> trueDelayCompare = new LinkedHashMap<>();
+        trueDelayCompare.put("originalTrueDelayOrderCount", originalTrueDelayOrderCount);
+        trueDelayCompare.put("newTrueDelayOrderCount", newTrueDelayOrderCount);
+        trueDelayCompare.put("trueDelayOrderCountDiff", newTrueDelayOrderCount - originalTrueDelayOrderCount);
+        trueDelayCompare.put("originalTrueTotalDelayMinutes", originalTrueTotalDelayMinutes);
+        trueDelayCompare.put("newTrueTotalDelayMinutes", newTrueTotalDelayMinutes);
+        trueDelayCompare.put("trueTotalDelayMinutesDiff", newTrueTotalDelayMinutes - originalTrueTotalDelayMinutes);
+        trueDelayCompare.put("originalTrueMaxDelayMinutes", originalTrueMaxDelayMinutes);
+        trueDelayCompare.put("newTrueMaxDelayMinutes", newTrueMaxDelayMinutes);
+        trueDelayCompare.put("trueMaxDelayMinutesDiff", newTrueMaxDelayMinutes - originalTrueMaxDelayMinutes);
+        trueDelayCompare.put("insertOrderTrueDelayMinutes", insertOrderTrueDelayMinutes);
+
+        Map<String, Object> stabilityCompare = calculateStabilityCompare(originalFinishByOrder, newFinishByOrder);
+
         Map<String, Object> delayCompare = new LinkedHashMap<>();
-        delayCompare.put("originalDelayOrderCount", originalDelayOrderCount);
-        delayCompare.put("newDelayOrderCount", newDelayOrderCount);
-        delayCompare.put("delayOrderCountDiff", newDelayOrderCount - originalDelayOrderCount);
-        delayCompare.put("originalTotalDelayMinutes", originalTotalDelayMinutes);
-        delayCompare.put("newTotalDelayMinutes", newTotalDelayMinutes);
-        delayCompare.put("totalDelayMinutesDiff", newTotalDelayMinutes - originalTotalDelayMinutes);
-        delayCompare.put("originalMaxDelayMinutes", originalMaxDelayMinutes);
-        delayCompare.put("newMaxDelayMinutes", newMaxDelayMinutes);
-        delayCompare.put("maxDelayMinutesDiff", newMaxDelayMinutes - originalMaxDelayMinutes);
+        delayCompare.put("originalDelayOrderCount", originalTrueDelayOrderCount);
+        delayCompare.put("newDelayOrderCount", newTrueDelayOrderCount);
+        delayCompare.put("delayOrderCountDiff", newTrueDelayOrderCount - originalTrueDelayOrderCount);
+        delayCompare.put("originalTotalDelayMinutes", originalTrueTotalDelayMinutes);
+        delayCompare.put("newTotalDelayMinutes", newTrueTotalDelayMinutes);
+        delayCompare.put("totalDelayMinutesDiff", newTrueTotalDelayMinutes - originalTrueTotalDelayMinutes);
+        delayCompare.put("originalMaxDelayMinutes", originalTrueMaxDelayMinutes);
+        delayCompare.put("newMaxDelayMinutes", newTrueMaxDelayMinutes);
+        delayCompare.put("maxDelayMinutesDiff", newTrueMaxDelayMinutes - originalTrueMaxDelayMinutes);
 
         Map<String, Object> makespanCompare = new LinkedHashMap<>();
         makespanCompare.put("originalMakespan", formatDate(originalMakespan));
@@ -236,7 +252,8 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
 
         Map<String, Object> insertOrderCompare = new LinkedHashMap<>();
         insertOrderCompare.put("insertOrderFinishTime", formatDate(insertFinishTime));
-        insertOrderCompare.put("insertOrderDelayMinutes", insertDelayMinutes);
+        insertOrderCompare.put("insertOrderDelayMinutes", insertOrderTrueDelayMinutes);
+        insertOrderCompare.put("insertOrderTrueDelayMinutes", insertOrderTrueDelayMinutes);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("sourcePlanId", sourcePlan.getPlanId());
@@ -246,11 +263,17 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
         result.put("eventId", newPlan.getEventId());
         result.put("insertOrderCode", insertOrder == null ? null : insertOrder.getOrderCode());
         result.put("summary", summary);
+        result.put("trueDelayCompare", trueDelayCompare);
+        result.put("stabilityCompare", stabilityCompare);
         result.put("delayCompare", delayCompare);
         result.put("makespanCompare", makespanCompare);
         result.put("insertOrderCompare", insertOrderCompare);
-        result.put("conclusion", buildCompareConclusion(insertDelayMinutes, newDelayOrderCount - originalDelayOrderCount,
-                newTotalDelayMinutes - originalTotalDelayMinutes, (Long) makespanCompare.get("makespanDiffMinutes")));
+        result.put("conclusion", buildCompareConclusion(insertOrderTrueDelayMinutes,
+                newTrueDelayOrderCount - originalTrueDelayOrderCount,
+                newTrueTotalDelayMinutes - originalTrueTotalDelayMinutes,
+                getLong(stabilityCompare, "stabilityDelayOrderCount"),
+                getLong(stabilityCompare, "stabilityTotalDelayMinutes"),
+                (Long) makespanCompare.get("makespanDiffMinutes")));
         return result;
     }
 
@@ -327,7 +350,7 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
 
     private Map<String, Object> calculatePlanKpi(List<ApsScheduleTask> tasks)
     {
-        Map<Long, Date> finishTimeByOrder = new HashMap<>();
+        Map<Long, Date> finishTimeByOrder = calculateOrderFinishTimes(tasks);
         Date makespan = null;
         for (ApsScheduleTask task : tasks)
         {
@@ -339,15 +362,6 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
             if (makespan == null || endTime.after(makespan))
             {
                 makespan = endTime;
-            }
-            Long orderId = task.getOrderId();
-            if (orderId != null)
-            {
-                Date current = finishTimeByOrder.get(orderId);
-                if (current == null || endTime.after(current))
-                {
-                    finishTimeByOrder.put(orderId, endTime);
-                }
             }
         }
 
@@ -377,6 +391,58 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
         kpi.put("totalDelayMinutes", totalDelayMinutes);
         kpi.put("maxDelayMinutes", maxDelayMinutes);
         return kpi;
+    }
+
+    private Map<Long, Date> calculateOrderFinishTimes(List<ApsScheduleTask> tasks)
+    {
+        Map<Long, Date> finishTimeByOrder = new HashMap<>();
+        for (ApsScheduleTask task : tasks)
+        {
+            Date endTime = task.getPlannedEndTime();
+            Long orderId = task.getOrderId();
+            if (orderId == null || endTime == null)
+            {
+                continue;
+            }
+            Date current = finishTimeByOrder.get(orderId);
+            if (current == null || endTime.after(current))
+            {
+                finishTimeByOrder.put(orderId, endTime);
+            }
+        }
+        return finishTimeByOrder;
+    }
+
+    private Map<String, Object> calculateStabilityCompare(Map<Long, Date> originalFinishByOrder,
+            Map<Long, Date> newFinishByOrder)
+    {
+        long stabilityDelayOrderCount = 0L;
+        long stabilityTotalDelayMinutes = 0L;
+        long stabilityMaxDelayMinutes = 0L;
+        long comparableOrderCount = 0L;
+        for (Map.Entry<Long, Date> entry : newFinishByOrder.entrySet())
+        {
+            Date originalFinishTime = originalFinishByOrder.get(entry.getKey());
+            if (originalFinishTime == null || entry.getValue() == null)
+            {
+                continue;
+            }
+            comparableOrderCount++;
+            long stabilityDelayMinutes = Math.max(0L, minutesBetween(originalFinishTime, entry.getValue()));
+            if (stabilityDelayMinutes > 0)
+            {
+                stabilityDelayOrderCount++;
+                stabilityTotalDelayMinutes += stabilityDelayMinutes;
+                stabilityMaxDelayMinutes = Math.max(stabilityMaxDelayMinutes, stabilityDelayMinutes);
+            }
+        }
+        Map<String, Object> stabilityCompare = new LinkedHashMap<>();
+        stabilityCompare.put("stabilityDelayOrderCount", stabilityDelayOrderCount);
+        stabilityCompare.put("stabilityTotalDelayMinutes", stabilityTotalDelayMinutes);
+        stabilityCompare.put("stabilityMaxDelayMinutes", stabilityMaxDelayMinutes);
+        stabilityCompare.put("averageStabilityDelayMinutes",
+                comparableOrderCount == 0L ? 0D : round4((double) stabilityTotalDelayMinutes / comparableOrderCount));
+        return stabilityCompare;
     }
 
     private ApsSchedulePlan validateReschedulePlan(Long planId)
@@ -481,17 +547,22 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
         return date == null ? null : DateUtils.parseDateToStr(DATE_TIME_FORMAT, date);
     }
 
-    private String buildCompareConclusion(long insertDelayMinutes, long delayOrderCountDiff,
-            long totalDelayMinutesDiff, long makespanDiffMinutes)
+    private String buildCompareConclusion(long insertOrderTrueDelayMinutes, long trueDelayOrderCountDiff,
+            long trueTotalDelayMinutesDiff, long stabilityDelayOrderCount,
+            long stabilityTotalDelayMinutes, long makespanDiffMinutes)
     {
-        String insertText = insertDelayMinutes <= 0 ? "新方案保障了插单订单按期完成" : "插单订单仍存在延期";
-        String delayText = delayOrderCountDiff < 0 ? "延期订单数减少"
-                : (delayOrderCountDiff > 0 ? "延期订单数增加" : "延期订单数不变");
-        String totalDelayText = totalDelayMinutesDiff < 0 ? "总延期时间减少"
-                : (totalDelayMinutesDiff > 0 ? "总延期时间增加" : "总延期时间不变");
+        String insertText = insertOrderTrueDelayMinutes <= 0
+                ? "新方案保障插单 lot 按真实交期完成" : "插单 lot 相对真实交期仍存在延期";
+        String delayText = trueDelayOrderCountDiff < 0 ? "真实延期 lot 数减少"
+                : (trueDelayOrderCountDiff > 0 ? "真实延期 lot 数增加" : "真实延期 lot 数不变");
+        String totalDelayText = trueTotalDelayMinutesDiff < 0 ? "真实总延期时间减少"
+                : (trueTotalDelayMinutesDiff > 0 ? "真实总延期时间增加" : "真实总延期时间不变");
+        String stabilityText = stabilityDelayOrderCount > 0
+                ? "部分普通 lot 相比原计划发生后移，计划稳定性有所下降，后移总计 " + stabilityTotalDelayMinutes + " 分钟"
+                : "普通 lot 未出现相对原计划的后移扰动";
         String makespanText = makespanDiffMinutes > 0 ? "整体完工时间有所增加"
                 : (makespanDiffMinutes < 0 ? "整体完工时间有所缩短" : "整体完工时间不变");
-        return insertText + "，" + delayText + "，" + totalDelayText + "，" + makespanText + "。";
+        return insertText + "；" + delayText + "，" + totalDelayText + "；" + stabilityText + "；" + makespanText + "。";
     }
 
     private List<ApsRouteOperation> selectEnabledRouteOperations()

@@ -66,10 +66,13 @@ def _initial_population(seed: List[int], population_size: int) -> List[List[int]
 
 def _fitness(request: LocalRescheduleRequest, chromosome: List[int]) -> float:
     _, kpi, _ = decode_local_reschedule(request, chromosome)
+    true_delay = kpi.get("trueDelay", {})
+    stability_delay = kpi.get("stabilityDelay", {})
     return (
-        10 * float(kpi.get("insertOrderDelayMinutes", 0))
-        + 5 * float(kpi.get("totalDelayMinutes", 0))
-        + 3 * float(kpi.get("maxDelayMinutes", 0))
+        10 * float(true_delay.get("insertOrderTrueDelayMinutes", kpi.get("insertOrderTrueDelayMinutes", 0)))
+        + 5 * float(true_delay.get("trueTotalDelayMinutes", kpi.get("totalDelayMinutes", 0)))
+        + 3 * float(true_delay.get("trueMaxDelayMinutes", kpi.get("maxDelayMinutes", 0)))
+        + 2 * float(stability_delay.get("stabilityTotalDelayMinutes", 0))
         + 1 * float(kpi.get("makespan", 0))
         + 2 * float(kpi.get("changedTaskCount", 0))
     )

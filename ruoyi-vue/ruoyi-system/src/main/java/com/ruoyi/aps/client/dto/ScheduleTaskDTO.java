@@ -22,6 +22,7 @@ public class ScheduleTaskDTO
     private String originalStartTime;
     private String originalEndTime;
     private Long originalEquipmentId;
+    private String dueTime;
 
     public Long getOrderId() { return orderId; }
     public void setOrderId(Long orderId) { this.orderId = orderId; }
@@ -63,4 +64,6 @@ public class ScheduleTaskDTO
     public void setOriginalEndTime(String originalEndTime) { this.originalEndTime = originalEndTime; }
     public Long getOriginalEquipmentId() { return originalEquipmentId; }
     public void setOriginalEquipmentId(Long originalEquipmentId) { this.originalEquipmentId = originalEquipmentId; }
+    public String getDueTime() { return dueTime; }
+    public void setDueTime(String dueTime) { this.dueTime = dueTime; }
 }

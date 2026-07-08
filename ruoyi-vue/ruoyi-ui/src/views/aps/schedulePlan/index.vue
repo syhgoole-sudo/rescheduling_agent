@@ -105,12 +105,30 @@
           <el-descriptions-item label="新最大延期分钟">{{ compareDetail.delayCompare.newMaxDelayMinutes }}</el-descriptions-item>
           <el-descriptions-item label="变化">{{ compareDetail.delayCompare.maxDelayMinutesDiff }}</el-descriptions-item>
         </el-descriptions>
+        <el-descriptions class="mt12" :column="3" border size="small" title="真实交期延期">
+          <el-descriptions-item label="原真实延期订单数">{{ trueDelayCompare.originalTrueDelayOrderCount }}</el-descriptions-item>
+          <el-descriptions-item label="新真实延期订单数">{{ trueDelayCompare.newTrueDelayOrderCount }}</el-descriptions-item>
+          <el-descriptions-item label="变化">{{ trueDelayCompare.trueDelayOrderCountDiff }}</el-descriptions-item>
+          <el-descriptions-item label="原真实总延期分钟">{{ trueDelayCompare.originalTrueTotalDelayMinutes }}</el-descriptions-item>
+          <el-descriptions-item label="新真实总延期分钟">{{ trueDelayCompare.newTrueTotalDelayMinutes }}</el-descriptions-item>
+          <el-descriptions-item label="变化">{{ trueDelayCompare.trueTotalDelayMinutesDiff }}</el-descriptions-item>
+          <el-descriptions-item label="原真实最大延期分钟">{{ trueDelayCompare.originalTrueMaxDelayMinutes }}</el-descriptions-item>
+          <el-descriptions-item label="新真实最大延期分钟">{{ trueDelayCompare.newTrueMaxDelayMinutes }}</el-descriptions-item>
+          <el-descriptions-item label="变化">{{ trueDelayCompare.trueMaxDelayMinutesDiff }}</el-descriptions-item>
+          <el-descriptions-item label="插单真实延期分钟">{{ trueDelayCompare.insertOrderTrueDelayMinutes }}</el-descriptions-item>
+        </el-descriptions>
+        <el-descriptions class="mt12" :column="4" border size="small" title="计划稳定性扰动">
+          <el-descriptions-item label="后移订单数">{{ stabilityCompare.stabilityDelayOrderCount }}</el-descriptions-item>
+          <el-descriptions-item label="总后移分钟">{{ stabilityCompare.stabilityTotalDelayMinutes }}</el-descriptions-item>
+          <el-descriptions-item label="最大后移分钟">{{ stabilityCompare.stabilityMaxDelayMinutes }}</el-descriptions-item>
+          <el-descriptions-item label="平均后移分钟">{{ stabilityCompare.averageStabilityDelayMinutes }}</el-descriptions-item>
+        </el-descriptions>
         <el-descriptions class="mt12" :column="2" border size="small" title="完工时间">
           <el-descriptions-item label="原 makespan">{{ compareDetail.makespanCompare.originalMakespan }}</el-descriptions-item>
           <el-descriptions-item label="新 makespan">{{ compareDetail.makespanCompare.newMakespan }}</el-descriptions-item>
           <el-descriptions-item label="makespan 变化分钟">{{ compareDetail.makespanCompare.makespanDiffMinutes }}</el-descriptions-item>
           <el-descriptions-item label="插单完工时间">{{ compareDetail.insertOrderCompare.insertOrderFinishTime }}</el-descriptions-item>
-          <el-descriptions-item label="插单延期分钟">{{ compareDetail.insertOrderCompare.insertOrderDelayMinutes }}</el-descriptions-item>
+          <el-descriptions-item label="插单真实延期分钟">{{ insertOrderCompare.insertOrderTrueDelayMinutes }}</el-descriptions-item>
           <el-descriptions-item label="结论">{{ compareDetail.conclusion }}</el-descriptions-item>
         </el-descriptions>
       </template>
@@ -195,6 +213,41 @@ export default {
   },
   created() {
     this.getList();
+  },
+  computed: {
+    trueDelayCompare() {
+      return this.compareDetail && this.compareDetail.trueDelayCompare
+        ? this.compareDetail.trueDelayCompare
+        : this.legacyTrueDelayCompare;
+    },
+    stabilityCompare() {
+      return this.compareDetail && this.compareDetail.stabilityCompare
+        ? this.compareDetail.stabilityCompare
+        : {};
+    },
+    insertOrderCompare() {
+      const compare = this.compareDetail && this.compareDetail.insertOrderCompare ? this.compareDetail.insertOrderCompare : {};
+      return {
+        ...compare,
+        insertOrderTrueDelayMinutes: compare.insertOrderTrueDelayMinutes || compare.insertOrderDelayMinutes || 0
+      };
+    },
+    legacyTrueDelayCompare() {
+      const delay = this.compareDetail && this.compareDetail.delayCompare ? this.compareDetail.delayCompare : {};
+      const insertOrder = this.compareDetail && this.compareDetail.insertOrderCompare ? this.compareDetail.insertOrderCompare : {};
+      return {
+        originalTrueDelayOrderCount: delay.originalDelayOrderCount,
+        newTrueDelayOrderCount: delay.newDelayOrderCount,
+        trueDelayOrderCountDiff: delay.delayOrderCountDiff,
+        originalTrueTotalDelayMinutes: delay.originalTotalDelayMinutes,
+        newTrueTotalDelayMinutes: delay.newTotalDelayMinutes,
+        trueTotalDelayMinutesDiff: delay.totalDelayMinutesDiff,
+        originalTrueMaxDelayMinutes: delay.originalMaxDelayMinutes,
+        newTrueMaxDelayMinutes: delay.newMaxDelayMinutes,
+        trueMaxDelayMinutesDiff: delay.maxDelayMinutesDiff,
+        insertOrderTrueDelayMinutes: insertOrder.insertOrderTrueDelayMinutes || insertOrder.insertOrderDelayMinutes || 0
+      };
+    }
   },
   methods: {
     getList() {

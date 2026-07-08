@@ -448,22 +448,26 @@ export default {
     kpiRows() {
       const detail = this.compareDetail || {};
       const summary = detail.summary || {};
-      const delay = detail.trueDelayCompare || detail.delayCompare || {};
+      const legacyDelay = detail.delayCompare || {};
+      const delay = detail.trueDelayCompare || {
+        newTrueDelayOrderCount: legacyDelay.newDelayOrderCount,
+        trueTotalDelayMinutesDiff: legacyDelay.totalDelayMinutesDiff
+      };
       const stability = detail.stabilityCompare || {};
       const insertOrder = detail.insertOrderCompare || {};
       const makespan = detail.makespanCompare || {};
       const rows = [
-        ["originalTaskCount", "原任务数", summary.originalTaskCount],
-        ["newTaskCount", "新任务数", summary.newTaskCount],
+        ["insertOrderTrueDelayMinutes", "插单真实延期分钟", insertOrder.insertOrderTrueDelayMinutes || insertOrder.insertOrderDelayMinutes],
+        ["newTrueDelayOrderCount", "新方案真实延期订单数", delay.newTrueDelayOrderCount],
+        ["trueTotalDelayMinutesDiff", "真实总延期变化", delay.trueTotalDelayMinutesDiff],
+        ["stabilityDelayOrderCount", "计划后移订单数", stability.stabilityDelayOrderCount],
+        ["stabilityTotalDelayMinutes", "计划总后移分钟", stability.stabilityTotalDelayMinutes],
         ["changedTaskCount", "变更任务数", summary.changedTaskCount],
+        ["frozenTaskCount", "冻结任务数", summary.frozenTaskCount],
+        ["makespanDiffMinutes", "Makespan 变化分钟", makespan.makespanDiffMinutes],
         ["changedTaskRatio", "变更比例", summary.changedTaskRatio],
         ["insertedTaskCount", "插单任务数", summary.insertedTaskCount],
-        ["frozenTaskCount", "冻结任务数", summary.frozenTaskCount],
         ["insertOrderFinishTime", "插单完成时间", insertOrder.insertOrderFinishTime],
-        ["insertOrderDelayMinutes", "插单延期分钟", insertOrder.insertOrderDelayMinutes],
-        ["makespanDiffMinutes", "Makespan 变化分钟", makespan.makespanDiffMinutes],
-        ["delayOrderCountDiff", "延期订单数变化", delay.delayOrderCountDiff],
-        ["totalDelayMinutesDiff", "总延期分钟变化", delay.totalDelayMinutesDiff],
         ["trueDelayCompare", "真实交期延期", this.pickCompareSummary(detail.trueDelayCompare)],
         ["stabilityCompare", "计划稳定性扰动", this.pickCompareSummary(stability)]
       ];

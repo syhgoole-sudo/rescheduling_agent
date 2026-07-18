@@ -144,10 +144,18 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
                 .map(ApsScheduleTask::getEquipmentId)
                 .filter(item -> item != null)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<Long, String> affectedProducts = new LinkedHashMap<>();
+        for (ApsScheduleTask task : affectedTasks)
+        {
+            if (task.getProductId() != null)
+            {
+                affectedProducts.putIfAbsent(task.getProductId(), task.getProductCode());
+            }
+        }
 
         String impactLevel = calculateImpactLevel(affectedTasks.size());
         Map<String, Object> impact = buildImpactJson(insertOrder, equipmentGroupIds, affectedEquipmentIds,
-                affectedOrderIds, affectedTaskIds, affectedTasks.size(), impactLevel,
+                affectedOrderIds, affectedTaskIds, affectedProducts, affectedTasks.size(), impactLevel,
                 impactWindowStart, impactWindowEnd);
 
         ApsInsertEvent event = new ApsInsertEvent();
@@ -172,6 +180,8 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         result.put("affectedTaskCount", affectedTasks.size());
         result.put("affectedOrderCount", affectedOrderIds.size());
         result.put("affectedEquipmentCount", affectedEquipmentIds.size());
+        result.put("triggerProduct", impact.get("triggerProduct"));
+        result.put("affectedProducts", impact.get("affectedProducts"));
         result.put("overlapTaskCount", affectedTasks.size());
         result.put("impactWindowStart", formatDate(impactWindowStart));
         result.put("impactWindowEnd", formatDate(impactWindowEnd));
@@ -826,7 +836,7 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
 
     private Map<String, Object> buildImpactJson(ApsOrder insertOrder,
             Set<Long> equipmentGroupIds, Set<Long> affectedEquipmentIds,
-            Set<Long> affectedOrderIds, Set<Long> affectedTaskIds,
+            Set<Long> affectedOrderIds, Set<Long> affectedTaskIds, Map<Long, String> affectedProducts,
             int affectedTaskCount, String impactLevel, Date impactWindowStart, Date impactWindowEnd)
     {
         Map<String, Object> impact = new LinkedHashMap<>();
@@ -837,6 +847,19 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         impact.put("impactWindowEnd", formatDate(impactWindowEnd));
         impact.put("impactRule", "TIME_WINDOW_INTERSECTION");
         impact.put("insertOrder", buildInsertOrderJson(insertOrder));
+        Map<String, Object> triggerProduct = new LinkedHashMap<>();
+        triggerProduct.put("productId", insertOrder.getProductId());
+        triggerProduct.put("productCode", insertOrder.getProductCode());
+        impact.put("triggerProduct", triggerProduct);
+        List<Map<String, Object>> affectedProductDetails = new ArrayList<>();
+        for (Map.Entry<Long, String> entry : affectedProducts.entrySet())
+        {
+            Map<String, Object> product = new LinkedHashMap<>();
+            product.put("productId", entry.getKey());
+            product.put("productCode", entry.getValue());
+            affectedProductDetails.add(product);
+        }
+        impact.put("affectedProducts", affectedProductDetails);
         impact.put("affectedEquipmentGroupIds", new ArrayList<>(equipmentGroupIds));
         impact.put("affectedEquipmentIds", new ArrayList<>(affectedEquipmentIds));
         impact.put("affectedOrderIds", new ArrayList<>(affectedOrderIds));
@@ -854,6 +877,7 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         Map<String, Object> order = new LinkedHashMap<>();
         order.put("orderId", insertOrder.getOrderId());
         order.put("orderCode", insertOrder.getOrderCode());
+        order.put("productId", insertOrder.getProductId());
         order.put("productCode", insertOrder.getProductCode());
         order.put("priorityLevel", insertOrder.getPriorityLevel());
         order.put("releaseTime", formatDate(insertOrder.getReleaseTime()));

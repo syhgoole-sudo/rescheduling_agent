@@ -24,8 +24,35 @@
       type="info"
       :closable="false"
       show-icon
-      title="当前初始调度为全局调度，产品选择仅用于展示工艺路线和筛选 Hot Lot。"
+      title="当前产品用于业务查看和 Hot Lot 选择，初始方案仍为共享设备约束下的全局调度方案。"
     />
+
+    <el-card shadow="never" class="context-card">
+      <div slot="header" class="panel-header">
+        <span>当前调度上下文</span>
+        <el-tag size="mini" type="info">{{ stageText }}</el-tag>
+      </div>
+      <el-descriptions :column="4" border size="small" class="context-descriptions">
+        <el-descriptions-item label="系统当前时间">
+          {{ systemCurrentTime }}
+          <span class="time-hint">现实时间</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="场景时间">
+          {{ formatContextTime(sceneTime) }}
+          <span class="time-hint">{{ sceneTimeSource }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="插单发生时间">{{ formatContextTime(insertEvent && insertEvent.eventTime) }}</el-descriptions-item>
+        <el-descriptions-item label="Lot 释放时间">{{ formatContextTime(selectedHotLot && selectedHotLot.releaseTime) }}</el-descriptions-item>
+        <el-descriptions-item label="当前原方案">{{ sourcePlan ? sourcePlan.planCode : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="原方案生成时间">{{ formatContextTime(sourcePlan && sourcePlan.createTime) }}</el-descriptions-item>
+        <el-descriptions-item label="当前候选方案">{{ newPlan ? newPlan.planCode : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="候选方案生成时间">{{ formatContextTime(newPlan && newPlan.createTime) }}</el-descriptions-item>
+        <el-descriptions-item label="当前 Hot Lot">{{ selectedHotLot ? selectedHotLot.orderCode : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="当前算法">{{ displayAlgorithmName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="randomSeed">{{ contextRandomSeed }}</el-descriptions-item>
+        <el-descriptions-item label="工作台阶段">{{ workbenchStage }} / {{ stageText }}</el-descriptions-item>
+      </el-descriptions>
+    </el-card>
 
     <el-row :gutter="12" class="main-grid">
       <el-col :xs="24" :lg="8">
@@ -448,7 +475,9 @@ export default {
       evidenceOpen: false,
       evidenceView: "orders",
       explanationOpen: false,
-      aiExplanationOpen: false
+      aiExplanationOpen: false,
+      systemCurrentTime: "-",
+      systemTimeTimer: null
     };
   },
   computed: {
@@ -552,6 +581,28 @@ export default {
       const planKpi = this.newPlan ? this.parseJson(this.newPlan.kpiJson) : null;
       return planKpi && planKpi.randomSeed !== undefined ? planKpi.randomSeed : null;
     },
+    contextRandomSeed() {
+      const algorithmName = String(this.displayAlgorithmName || "").toUpperCase();
+      if (this.algorithmType !== "GA" && !algorithmName.includes("GA")) {
+        return "不适用";
+      }
+      return this.displayRandomSeed !== null ? this.displayRandomSeed : this.randomSeed;
+    },
+    sceneTime() {
+      if (this.insertEvent && this.insertEvent.eventTime) {
+        return this.insertEvent.eventTime;
+      }
+      if (this.selectedHotLot && this.selectedHotLot.releaseTime) {
+        return this.selectedHotLot.releaseTime;
+      }
+      return this.sourcePlan ? this.sourcePlan.scheduleStartTime : null;
+    },
+    sceneTimeSource() {
+      if (this.insertEvent && this.insertEvent.eventTime) return "插单发生时间";
+      if (this.selectedHotLot && this.selectedHotLot.releaseTime) return "Lot 释放时间";
+      if (this.sourcePlan && this.sourcePlan.scheduleStartTime) return "计划起始时间";
+      return "尚未确定";
+    },
     kpiRows() {
       const detail = this.compareDetail || {};
       const summary = detail.summary || {};
@@ -593,7 +644,23 @@ export default {
     this.loadProducts();
     this.refreshInitialActivePlans();
   },
+  mounted() {
+    this.updateSystemCurrentTime();
+    this.systemTimeTimer = window.setInterval(this.updateSystemCurrentTime, 1000);
+  },
+  beforeDestroy() {
+    if (this.systemTimeTimer) {
+      window.clearInterval(this.systemTimeTimer);
+      this.systemTimeTimer = null;
+    }
+  },
   methods: {
+    updateSystemCurrentTime() {
+      this.systemCurrentTime = this.formatContextTime(new Date());
+    },
+    formatContextTime(value) {
+      return value ? this.parseTime(value, "{y}-{m}-{d} {h}:{i}:{s}") : "-";
+    },
     loadProducts() {
       this.productLoading = true;
       listProduct({ pageNum: 1, pageSize: 200, status: "0" }).then(response => {
@@ -986,6 +1053,17 @@ export default {
 
 .global-tip {
   margin-top: 12px;
+}
+
+.context-card {
+  margin-top: 12px;
+  border-radius: 4px;
+}
+
+.time-hint {
+  margin-left: 6px;
+  color: #909399;
+  font-size: 12px;
 }
 
 .main-grid {

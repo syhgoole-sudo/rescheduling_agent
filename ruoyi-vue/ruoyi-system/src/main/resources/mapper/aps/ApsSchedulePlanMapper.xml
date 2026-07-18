@@ -20,6 +20,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="aiExplanation" column="ai_explanation" />
         <result property="activeFlag" column="active_flag" />
         <result property="delFlag" column="del_flag" />
+        <result property="totalTaskCount" column="total_task_count" />
+        <result property="currentProductTaskCount" column="current_product_task_count" />
+        <result property="participatingProductCount" column="participating_product_count" />
+        <result property="planScope" column="plan_scope" />
         <result property="createBy" column="create_by" />
         <result property="createTime" column="create_time" />
         <result property="updateBy" column="update_by" />
@@ -32,14 +36,45 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </sql>
 
     <select id="selectApsSchedulePlanList" parameterType="com.ruoyi.aps.domain.ApsSchedulePlan" resultMap="ApsSchedulePlanResult">
-        <include refid="selectApsSchedulePlanVo"/>
+        select p.plan_id, p.plan_code, p.plan_name, p.plan_type, p.plan_status,
+               p.source_plan_id, p.event_id, p.algorithm_name, p.strategy_type,
+               p.schedule_start_time, p.schedule_end_time, p.kpi_json, p.ai_explanation,
+               p.active_flag, p.del_flag, p.create_by, p.create_time, p.update_by, p.update_time, p.remark,
+               coalesce(task_stats.total_task_count, 0) as total_task_count,
+               coalesce(task_stats.participating_product_count, 0) as participating_product_count,
+               <choose>
+                   <when test="productId != null">
+                       (select count(1) from aps_schedule_task current_product_task
+                        where current_product_task.plan_id = p.plan_id
+                          and current_product_task.product_id = #{productId}
+                          and (current_product_task.del_flag = '0' or current_product_task.del_flag is null))
+                   </when>
+                   <otherwise>0</otherwise>
+               </choose> as current_product_task_count,
+               'GLOBAL' as plan_scope
+        from aps_schedule_plan p
+        left join (
+            select plan_id, count(1) as total_task_count,
+                   count(distinct product_id) as participating_product_count
+            from aps_schedule_task
+            where del_flag = '0' or del_flag is null
+            group by plan_id
+        ) task_stats on task_stats.plan_id = p.plan_id
         <where>
-            and (del_flag = '0' or del_flag is null)
-            <if test="planCode != null and planCode != ''"> and plan_code like concat('%', #{planCode}, '%')</if>
-            <if test="planName != null and planName != ''"> and plan_name like concat('%', #{planName}, '%')</if>
-            <if test="planType != null and planType != ''"> and plan_type like concat('%', #{planType}, '%')</if>
-            <if test="planStatus != null and planStatus != ''"> and plan_status like concat('%', #{planStatus}, '%')</if>
-            <if test="activeFlag != null and activeFlag != ''"> and active_flag like concat('%', #{activeFlag}, '%')</if>
+            and (p.del_flag = '0' or p.del_flag is null)
+            <if test="planCode != null and planCode != ''"> and p.plan_code like concat('%', #{planCode}, '%')</if>
+            <if test="planName != null and planName != ''"> and p.plan_name like concat('%', #{planName}, '%')</if>
+            <if test="planType != null and planType != ''"> and p.plan_type like concat('%', #{planType}, '%')</if>
+            <if test="planStatus != null and planStatus != ''"> and p.plan_status like concat('%', #{planStatus}, '%')</if>
+            <if test="activeFlag != null and activeFlag != ''"> and p.active_flag like concat('%', #{activeFlag}, '%')</if>
+            <if test="productId != null">
+                and exists (
+                    select 1 from aps_schedule_task product_task
+                    where product_task.plan_id = p.plan_id
+                      and product_task.product_id = #{productId}
+                      and (product_task.del_flag = '0' or product_task.del_flag is null)
+                )
+            </if>
         </where>
     </select>
 

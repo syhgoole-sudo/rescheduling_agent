@@ -36,6 +36,25 @@ public class ApsInsertEvent extends BaseEntity
     @Excel(name = "重调度生成的新方案ID")
     private Long newPlanId;
 
+    /** 插单 Lot 编码，仅用于列表上下文展示 */
+    private String insertOrderCode;
+
+    /** 插单 Lot 释放时间，仅用于列表上下文展示 */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date releaseTime;
+
+    /** 原方案编码，仅用于列表上下文展示 */
+    private String sourcePlanCode;
+
+    /** 新方案编码，仅用于列表上下文展示 */
+    private String newPlanCode;
+
+    /** 插单 Hot Lot 所属产品ID，作为事件查询上下文 */
+    private Long triggerProductId;
+
+    /** 插单 Hot Lot 所属产品编码 */
+    private String triggerProductCode;
+
     /** 事件发生时间 */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Excel(name = "事件发生时间")
@@ -110,6 +129,66 @@ public class ApsInsertEvent extends BaseEntity
         return newPlanId;
     }
 
+    public String getInsertOrderCode()
+    {
+        return insertOrderCode;
+    }
+
+    public void setInsertOrderCode(String insertOrderCode)
+    {
+        this.insertOrderCode = insertOrderCode;
+    }
+
+    public Date getReleaseTime()
+    {
+        return releaseTime;
+    }
+
+    public void setReleaseTime(Date releaseTime)
+    {
+        this.releaseTime = releaseTime;
+    }
+
+    public String getSourcePlanCode()
+    {
+        return sourcePlanCode;
+    }
+
+    public void setSourcePlanCode(String sourcePlanCode)
+    {
+        this.sourcePlanCode = sourcePlanCode;
+    }
+
+    public String getNewPlanCode()
+    {
+        return newPlanCode;
+    }
+
+    public void setNewPlanCode(String newPlanCode)
+    {
+        this.newPlanCode = newPlanCode;
+    }
+
+    public Long getTriggerProductId()
+    {
+        return triggerProductId;
+    }
+
+    public void setTriggerProductId(Long triggerProductId)
+    {
+        this.triggerProductId = triggerProductId;
+    }
+
+    public String getTriggerProductCode()
+    {
+        return triggerProductCode;
+    }
+
+    public void setTriggerProductCode(String triggerProductCode)
+    {
+        this.triggerProductCode = triggerProductCode;
+    }
+
     public void setEventTime(Date eventTime)
     {
         this.eventTime = eventTime;
@@ -178,6 +257,12 @@ public class ApsInsertEvent extends BaseEntity
             .append("insertOrderId", getInsertOrderId())
             .append("sourcePlanId", getSourcePlanId())
             .append("newPlanId", getNewPlanId())
+            .append("insertOrderCode", getInsertOrderCode())
+            .append("releaseTime", getReleaseTime())
+            .append("sourcePlanCode", getSourcePlanCode())
+            .append("newPlanCode", getNewPlanCode())
+            .append("triggerProductId", getTriggerProductId())
+            .append("triggerProductCode", getTriggerProductCode())
             .append("eventTime", getEventTime())
             .append("eventStatus", getEventStatus())
             .append("impactJson", getImpactJson())

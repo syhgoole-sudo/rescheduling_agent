@@ -1,5 +1,26 @@
 <template>
   <div class="app-container">
+    <el-card shadow="never" class="product-context-card">
+      <div class="product-context-row">
+        <div>
+          <div class="context-title">方案产品查看上下文</div>
+          <div class="context-tip">产品只用于筛选包含该产品任务的全局方案，不会将方案拆分为产品独立方案。</div>
+        </div>
+        <el-select v-model="selectedProductId" filterable placeholder="请选择产品" class="product-selector" :loading="productLoading" @change="handleProductChange">
+          <el-option v-for="product in productList" :key="product.productId" :label="formatProductLabel(product)" :value="product.productId" />
+        </el-select>
+      </div>
+    </el-card>
+
+    <el-tabs v-model="activePlanTab" class="business-tabs" @tab-click="handlePlanTabChange">
+      <el-tab-pane label="当前有效" name="active" />
+      <el-tab-pane label="候选方案" name="pending" />
+      <el-tab-pane label="已确认" name="confirmed" />
+      <el-tab-pane label="已拒绝" name="rejected" />
+      <el-tab-pane label="历史方案" name="history" />
+      <el-tab-pane label="全部" name="all" />
+    </el-tabs>
+
     <el-form :model="queryParams" ref="queryForm" size="small" :inline="true" v-show="showSearch" label-width="90px">
       <el-form-item label="方案编码" prop="planCode">
         <el-input v-model="queryParams.planCode" placeholder="请输入方案编码" clearable @keyup.enter.native="handleQuery" />
@@ -46,22 +67,42 @@
       <el-table-column label="方案ID" align="center" prop="planId" width="90" />
       <el-table-column label="方案编码" align="center" prop="planCode" :show-overflow-tooltip="true" />
       <el-table-column label="方案名称" align="center" prop="planName" :show-overflow-tooltip="true" />
-      <el-table-column label="方案类型" align="center" prop="planType" width="110" />
-      <el-table-column label="方案状态" align="center" prop="planStatus" width="110" />
+      <el-table-column label="方案类型" align="center" prop="planType" width="110">
+        <template slot-scope="scope"><el-tag size="mini" :type="planTypeTag(scope.row.planType)">{{ scope.row.planType }}</el-tag></template>
+      </el-table-column>
+      <el-table-column label="方案状态" align="center" prop="planStatus" width="110">
+        <template slot-scope="scope"><el-tag size="mini" :type="planStatusTag(scope.row.planStatus)">{{ scope.row.planStatus }}</el-tag></template>
+      </el-table-column>
+      <el-table-column label="有效标识" align="center" prop="activeFlag" width="86">
+        <template slot-scope="scope"><el-tag size="mini" :type="scope.row.activeFlag === 'Y' ? 'success' : 'info'">{{ scope.row.activeFlag }}</el-tag></template>
+      </el-table-column>
+      <el-table-column label="方案范围" align="center" prop="planScope" width="100">
+        <template slot-scope="scope"><el-tag size="mini" type="info">{{ scope.row.planScope || 'GLOBAL' }}</el-tag></template>
+      </el-table-column>
+      <el-table-column label="方案总任务数" align="center" prop="totalTaskCount" width="110" />
+      <el-table-column label="当前产品任务数" align="center" prop="currentProductTaskCount" width="125" />
+      <el-table-column label="参与产品数" align="center" prop="participatingProductCount" width="105" />
+      <el-table-column label="原方案" align="center" min-width="135" show-overflow-tooltip>
+        <template slot-scope="scope">{{ scope.row.sourcePlanCode || scope.row.sourcePlanId || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="插单事件" align="center" min-width="125" show-overflow-tooltip>
+        <template slot-scope="scope">{{ scope.row.eventCode || scope.row.eventId || '-' }}</template>
+      </el-table-column>
       <el-table-column label="算法名称" align="center" prop="algorithmName" :show-overflow-tooltip="true" />
       <el-table-column label="策略类型" align="center" prop="strategyType" :show-overflow-tooltip="true" />
-      <el-table-column label="开始时间" align="center" prop="scheduleStartTime" width="170">
+      <el-table-column label="方案生成时间" align="center" prop="createTime" width="170">
+        <template slot-scope="scope"><span>{{ parseTime(scope.row.createTime, '{y}-{m}-{d} {h}:{i}:{s}') }}</span></template>
+      </el-table-column>
+      <el-table-column label="计划起始时间" align="center" prop="scheduleStartTime" width="170">
         <template slot-scope="scope">
           <span>{{ parseTime(scope.row.scheduleStartTime, '{y}-{m}-{d} {h}:{i}:{s}') }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="结束时间" align="center" prop="scheduleEndTime" width="170">
+      <el-table-column label="计划结束时间" align="center" prop="scheduleEndTime" width="170">
         <template slot-scope="scope">
           <span>{{ parseTime(scope.row.scheduleEndTime, '{y}-{m}-{d} {h}:{i}:{s}') }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="有效" align="center" prop="activeFlag" width="80" />
-      <el-table-column label="KPI" align="center" prop="kpiJson" :show-overflow-tooltip="true" />
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width" width="300">
         <template slot-scope="scope">
           <el-button size="mini" type="text" icon="el-icon-tickets" @click="handleViewTasks(scope.row)" v-hasPermi="['aps:scheduleTask:list']">查看任务</el-button>
@@ -220,11 +261,11 @@
         <el-form-item label="策略类型" prop="strategyType">
           <el-input v-model="form.strategyType" placeholder="请输入策略类型" />
         </el-form-item>
-        <el-form-item label="开始时间" prop="scheduleStartTime">
-          <el-date-picker clearable v-model="form.scheduleStartTime" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" placeholder="请选择开始时间" />
+        <el-form-item label="计划起始时间" prop="scheduleStartTime">
+          <el-date-picker clearable v-model="form.scheduleStartTime" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" placeholder="请选择计划起始时间" />
         </el-form-item>
-        <el-form-item label="结束时间" prop="scheduleEndTime">
-          <el-date-picker clearable v-model="form.scheduleEndTime" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" placeholder="请选择结束时间" />
+        <el-form-item label="计划结束时间" prop="scheduleEndTime">
+          <el-date-picker clearable v-model="form.scheduleEndTime" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" placeholder="请选择计划结束时间" />
         </el-form-item>
         <el-form-item label="KPI" prop="kpiJson">
           <el-input v-model="form.kpiJson" type="textarea" placeholder="请输入KPI JSON" />
@@ -246,12 +287,16 @@
 
 <script>
 import { listSchedulePlan, getSchedulePlan, delSchedulePlan, addSchedulePlan, updateSchedulePlan, generateInitialSchedule, compareSchedulePlan, confirmSchedulePlan, rejectSchedulePlan } from "@/api/aps/schedulePlan";
+import { listProduct } from "@/api/aps/product";
 
 export default {
   name: "SchedulePlan",
   data() {
     return {
       loading: true,
+      productLoading: false,
+      productList: [],
+      selectedProductId: null,
       ids: [],
       selectedPlans: [],
       single: true,
@@ -264,6 +309,7 @@ export default {
       compareOpen: false,
       compareTab: "kpi",
       compareDetail: null,
+      activePlanTab: "active",
       queryParams: {
         pageNum: 1,
         pageSize: 10,
@@ -271,15 +317,19 @@ export default {
         planName: null,
         planType: null,
         planStatus: null,
-        activeFlag: null
+        activeFlag: null,
+        productId: null
       },
       form: {}
     };
   },
   created() {
-    this.getList();
+    this.loadProducts();
   },
   computed: {
+    selectedProduct() {
+      return this.productList.find(item => String(item.productId) === String(this.selectedProductId)) || null;
+    },
     trueDelayCompare() {
       return this.compareDetail && this.compareDetail.trueDelayCompare
         ? this.compareDetail.trueDelayCompare
@@ -315,13 +365,66 @@ export default {
     }
   },
   methods: {
+    loadProducts() {
+      this.productLoading = true;
+      listProduct({ pageNum: 1, pageSize: 200, status: "0" }).then(response => {
+        this.productList = response.rows || [];
+        this.selectedProductId = (this.productList[0] || {}).productId || null;
+        this.handleProductChange();
+      }).finally(() => {
+        this.productLoading = false;
+      });
+    },
+    handleProductChange() {
+      this.queryParams.productId = this.selectedProductId || null;
+      this.queryParams.pageNum = 1;
+      this.clearPlanSelection();
+      this.getList();
+    },
+    formatProductLabel(product) {
+      return `${product.productCode} / ${product.productName}`;
+    },
     getList() {
       this.loading = true;
-      listSchedulePlan(this.queryParams).then(response => {
-        this.schedulePlanList = response.rows;
+      listSchedulePlan(this.buildPlanQuery()).then(response => {
+        this.schedulePlanList = (response.rows || []).sort(this.comparePlanCreateTimeDesc);
         this.total = response.total;
+      }).finally(() => {
         this.loading = false;
       });
+    },
+    buildPlanQuery() {
+      const query = { ...this.queryParams };
+      const filters = {
+        active: { activeFlag: "Y" },
+        pending: { planType: "RESCHEDULE", planStatus: "PENDING" },
+        confirmed: { planStatus: "CONFIRMED" },
+        rejected: { planStatus: "REJECTED" },
+        history: { planStatus: "HISTORY" },
+        all: {}
+      };
+      return { ...query, ...(filters[this.activePlanTab] || {}), productId: this.selectedProductId };
+    },
+    handlePlanTabChange() {
+      this.queryParams.pageNum = 1;
+      this.clearPlanSelection();
+      this.getList();
+    },
+    clearPlanSelection() {
+      this.ids = [];
+      this.selectedPlans = [];
+      this.single = true;
+      this.multiple = true;
+    },
+    comparePlanCreateTimeDesc(a, b) {
+      return new Date(b.createTime || b.updateTime || 0).getTime() - new Date(a.createTime || a.updateTime || 0).getTime();
+    },
+    planTypeTag(type) {
+      return type === "RESCHEDULE" ? "warning" : "primary";
+    },
+    planStatusTag(status) {
+      const tags = { ACTIVE: "success", PENDING: "warning", CONFIRMED: "success", REJECTED: "danger", HISTORY: "info" };
+      return tags[status] || "info";
     },
     cancel() {
       this.open = false;
@@ -354,6 +457,7 @@ export default {
     },
     resetQuery() {
       this.resetForm("queryForm");
+      this.queryParams.productId = this.selectedProductId;
       this.handleQuery();
     },
     handleSelectionChange(selection) {
@@ -392,7 +496,7 @@ export default {
       });
     },
     handleViewTasks(row) {
-      this.$router.push({ path: "/aps/scheduleTask", query: { planId: row.planId } });
+      this.$router.push({ path: "/aps/scheduleTask", query: { planId: row.planId, productId: this.selectedProductId } });
     },
     handleViewGantt(row) {
       this.$router.push({ path: "/aps/scheduleTask/gantt", query: { planId: row.planId } });
@@ -480,7 +584,7 @@ export default {
     },
     handleExport() {
       this.download("aps/schedulePlan/export", {
-        ...this.queryParams
+        ...this.buildPlanQuery()
       }, `schedulePlan_${new Date().getTime()}.xlsx`);
     }
   }
@@ -491,6 +595,16 @@ export default {
 .mt12 {
   margin-top: 12px;
 }
+
+.business-tabs {
+  margin-bottom: 12px;
+}
+
+.product-context-card { margin-bottom: 12px; border-radius: 4px; }
+.product-context-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.context-title { color: #303133; font-size: 16px; font-weight: 600; }
+.context-tip { margin-top: 5px; color: #909399; font-size: 12px; }
+.product-selector { width: 360px; }
 
 .evidence-note {
   margin-top: 12px;

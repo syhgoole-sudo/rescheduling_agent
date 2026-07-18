@@ -76,6 +76,21 @@ public class ApsSchedulePlan extends BaseEntity
     @Excel(name = "删除标志：0存在，2删除")
     private String delFlag;
 
+    /** 查询上下文中的产品ID，不表示方案归属于该产品 */
+    private Long productId;
+
+    /** 方案全部产品任务总数 */
+    private Long totalTaskCount;
+
+    /** 查询上下文中当前产品的任务数 */
+    private Long currentProductTaskCount;
+
+    /** 方案任务涉及的产品数 */
+    private Long participatingProductCount;
+
+    /** 方案范围固定为全局调度 */
+    private String planScope;
+
     public void setPlanId(Long planId)
     {
         this.planId = planId;
@@ -226,6 +241,56 @@ public class ApsSchedulePlan extends BaseEntity
         return delFlag;
     }
 
+    public Long getProductId()
+    {
+        return productId;
+    }
+
+    public void setProductId(Long productId)
+    {
+        this.productId = productId;
+    }
+
+    public Long getTotalTaskCount()
+    {
+        return totalTaskCount;
+    }
+
+    public void setTotalTaskCount(Long totalTaskCount)
+    {
+        this.totalTaskCount = totalTaskCount;
+    }
+
+    public Long getCurrentProductTaskCount()
+    {
+        return currentProductTaskCount;
+    }
+
+    public void setCurrentProductTaskCount(Long currentProductTaskCount)
+    {
+        this.currentProductTaskCount = currentProductTaskCount;
+    }
+
+    public Long getParticipatingProductCount()
+    {
+        return participatingProductCount;
+    }
+
+    public void setParticipatingProductCount(Long participatingProductCount)
+    {
+        this.participatingProductCount = participatingProductCount;
+    }
+
+    public String getPlanScope()
+    {
+        return planScope;
+    }
+
+    public void setPlanScope(String planScope)
+    {
+        this.planScope = planScope;
+    }
+
     @Override
     public String toString() {
         return new ToStringBuilder(this,ToStringStyle.MULTI_LINE_STYLE)
@@ -244,6 +309,11 @@ public class ApsSchedulePlan extends BaseEntity
             .append("aiExplanation", getAiExplanation())
             .append("activeFlag", getActiveFlag())
             .append("delFlag", getDelFlag())
+            .append("productId", getProductId())
+            .append("totalTaskCount", getTotalTaskCount())
+            .append("currentProductTaskCount", getCurrentProductTaskCount())
+            .append("participatingProductCount", getParticipatingProductCount())
+            .append("planScope", getPlanScope())
             .append("createBy", getCreateBy())
             .append("createTime", getCreateTime())
             .append("updateBy", getUpdateBy())

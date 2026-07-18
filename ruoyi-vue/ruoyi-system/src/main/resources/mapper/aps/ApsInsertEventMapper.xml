@@ -10,6 +10,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="insertOrderId" column="insert_order_id" />
         <result property="sourcePlanId" column="source_plan_id" />
         <result property="newPlanId" column="new_plan_id" />
+        <result property="insertOrderCode" column="insert_order_code" />
+        <result property="releaseTime" column="release_time" />
+        <result property="sourcePlanCode" column="source_plan_code" />
+        <result property="newPlanCode" column="new_plan_code" />
+        <result property="triggerProductId" column="trigger_product_id" />
+        <result property="triggerProductCode" column="trigger_product_code" />
         <result property="eventTime" column="event_time" />
         <result property="eventStatus" column="event_status" />
         <result property="impactJson" column="impact_json" />
@@ -24,21 +30,31 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectApsInsertEventVo">
-        select event_id, event_code, insert_order_id, source_plan_id, new_plan_id, event_time, event_status, impact_json, strategy_type, event_reason, del_flag, create_by, create_time, update_by, update_time, remark from aps_insert_event
+        select e.event_id, e.event_code, e.insert_order_id, e.source_plan_id, e.new_plan_id,
+               e.event_time, e.event_status, e.impact_json, e.strategy_type, e.event_reason,
+               e.del_flag, e.create_by, e.create_time, e.update_by, e.update_time, e.remark,
+               o.order_code as insert_order_code, o.release_time as release_time,
+               o.product_id as trigger_product_id, o.product_code as trigger_product_code,
+               source_plan.plan_code as source_plan_code, new_plan.plan_code as new_plan_code
+        from aps_insert_event e
+        left join aps_order o on o.order_id = e.insert_order_id
+        left join aps_schedule_plan source_plan on source_plan.plan_id = e.source_plan_id
+        left join aps_schedule_plan new_plan on new_plan.plan_id = e.new_plan_id
     </sql>
 
     <select id="selectApsInsertEventList" parameterType="com.ruoyi.aps.domain.ApsInsertEvent" resultMap="ApsInsertEventResult">
         <include refid="selectApsInsertEventVo"/>
         <where>
-            <if test="eventCode != null and eventCode != ''"> and event_code like concat('%', #{eventCode}, '%')</if>
-            <if test="insertOrderId != null"> and insert_order_id = #{insertOrderId}</if>
-            <if test="eventStatus != null and eventStatus != ''"> and event_status like concat('%', #{eventStatus}, '%')</if>
+            <if test="eventCode != null and eventCode != ''"> and e.event_code like concat('%', #{eventCode}, '%')</if>
+            <if test="insertOrderId != null"> and e.insert_order_id = #{insertOrderId}</if>
+            <if test="eventStatus != null and eventStatus != ''"> and e.event_status like concat('%', #{eventStatus}, '%')</if>
+            <if test="triggerProductId != null"> and o.product_id = #{triggerProductId}</if>
         </where>
     </select>
 
     <select id="selectApsInsertEventById" parameterType="Long" resultMap="ApsInsertEventResult">
         <include refid="selectApsInsertEventVo"/>
-        where event_id = #{eventId}
+        where e.event_id = #{eventId}
     </select>
 
     <insert id="insertApsInsertEvent" parameterType="com.ruoyi.aps.domain.ApsInsertEvent" useGeneratedKeys="true" keyProperty="eventId">

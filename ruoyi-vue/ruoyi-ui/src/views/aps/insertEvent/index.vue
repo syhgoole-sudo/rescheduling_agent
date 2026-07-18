@@ -1,5 +1,26 @@
 <template>
   <div class="app-container">
+    <el-card shadow="never" class="product-context-card">
+      <div class="product-context-row">
+        <div>
+          <div class="context-title">插单产品上下文</div>
+          <div class="context-tip">按 Hot Lot 所属产品筛选事件；影响产品仍按共享设备上的实际受影响任务完整展示。</div>
+        </div>
+        <el-select v-model="selectedProductId" filterable placeholder="请选择插单产品" class="product-selector" :loading="productLoading" @change="handleProductChange">
+          <el-option v-for="product in productList" :key="product.productId" :label="formatProductLabel(product)" :value="product.productId" />
+        </el-select>
+      </div>
+    </el-card>
+
+    <el-tabs v-model="activeEventTab" class="business-tabs" @tab-click="handleEventTabChange">
+      <el-tab-pane label="全部" name="all" />
+      <el-tab-pane label="待分析" name="new" />
+      <el-tab-pane label="已分析" name="analyzed" />
+      <el-tab-pane label="已重调度" name="rescheduled" />
+      <el-tab-pane label="已确认" name="confirmed" />
+      <el-tab-pane label="已拒绝" name="rejected" />
+    </el-tabs>
+
     <el-form :model="queryParams" ref="queryForm" size="small" :inline="true" v-show="showSearch" label-width="100px">
       <el-form-item label="事件编码" prop="eventCode">
         <el-input v-model="queryParams.eventCode" placeholder="请输入事件编码" clearable @keyup.enter.native="handleQuery" />
@@ -8,7 +29,13 @@
         <el-input v-model="queryParams.insertOrderId" placeholder="请输入插单订单ID" clearable @keyup.enter.native="handleQuery" />
       </el-form-item>
       <el-form-item label="事件状态" prop="eventStatus">
-        <el-input v-model="queryParams.eventStatus" placeholder="NEW / ANALYZED" clearable @keyup.enter.native="handleQuery" />
+        <el-select v-model="queryParams.eventStatus" placeholder="全部状态" clearable>
+          <el-option label="待分析" value="NEW" />
+          <el-option label="已分析" value="ANALYZED" />
+          <el-option label="已重调度" value="RESCHEDULED" />
+          <el-option label="已确认" value="CONFIRMED" />
+          <el-option label="已拒绝" value="REJECTED" />
+        </el-select>
       </el-form-item>
       <el-form-item>
         <el-button type="primary" icon="el-icon-search" size="mini" @click="handleQuery">搜索</el-button>
@@ -35,19 +62,42 @@
       <right-toolbar :showSearch.sync="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
 
+    <el-alert
+      class="time-note"
+      type="info"
+      :closable="false"
+      show-icon
+      title="插单发生时间、Lot 释放时间和事件记录创建时间含义不同，请按对应时间列判断业务场景。"
+    />
+
     <el-table v-loading="loading" :data="insertEventList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="55" align="center" />
       <el-table-column label="事件ID" align="center" prop="eventId" width="90" />
       <el-table-column label="事件编码" align="center" prop="eventCode" width="150" :show-overflow-tooltip="true" />
-      <el-table-column label="插单订单ID" align="center" prop="insertOrderId" width="110" />
-      <el-table-column label="原方案ID" align="center" prop="sourcePlanId" width="100" />
-      <el-table-column label="新方案ID" align="center" prop="newPlanId" width="100" />
-      <el-table-column label="事件时间" align="center" prop="eventTime" width="170">
+      <el-table-column label="Hot Lot" align="center" min-width="145" show-overflow-tooltip>
+        <template slot-scope="scope">{{ scope.row.insertOrderCode || scope.row.insertOrderId || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="插单产品" align="center" prop="triggerProductCode" min-width="110" show-overflow-tooltip />
+      <el-table-column label="原方案" align="center" min-width="145" show-overflow-tooltip>
+        <template slot-scope="scope">{{ formatPlanContext(scope.row.sourcePlanCode, scope.row.sourcePlanId) }}</template>
+      </el-table-column>
+      <el-table-column label="候选方案" align="center" min-width="145" show-overflow-tooltip>
+        <template slot-scope="scope">{{ formatPlanContext(scope.row.newPlanCode, scope.row.newPlanId) }}</template>
+      </el-table-column>
+      <el-table-column label="插单发生时间" align="center" prop="eventTime" width="170">
         <template slot-scope="scope">
           <span>{{ parseTime(scope.row.eventTime, '{y}-{m}-{d} {h}:{i}:{s}') }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="状态" align="center" prop="eventStatus" width="110" />
+      <el-table-column label="Lot 释放时间" align="center" prop="releaseTime" width="170">
+        <template slot-scope="scope"><span>{{ parseTime(scope.row.releaseTime, '{y}-{m}-{d} {h}:{i}:{s}') }}</span></template>
+      </el-table-column>
+      <el-table-column label="事件记录创建时间" align="center" prop="createTime" width="170">
+        <template slot-scope="scope"><span>{{ parseTime(scope.row.createTime, '{y}-{m}-{d} {h}:{i}:{s}') }}</span></template>
+      </el-table-column>
+      <el-table-column label="事件状态" align="center" prop="eventStatus" width="110">
+        <template slot-scope="scope"><el-tag size="mini" :type="eventStatusTag(scope.row.eventStatus)">{{ eventStatusLabel(scope.row.eventStatus) }}</el-tag></template>
+      </el-table-column>
       <el-table-column label="策略类型" align="center" prop="strategyType" width="210" :show-overflow-tooltip="true" />
       <el-table-column label="影响摘要" align="center" min-width="240" :show-overflow-tooltip="true">
         <template slot-scope="scope">
@@ -89,6 +139,8 @@
         <el-descriptions-item label="受影响订单数">{{ impactDetail.affectedOrderCount }}</el-descriptions-item>
         <el-descriptions-item label="受影响设备数">{{ impactDetail.affectedEquipmentCount }}</el-descriptions-item>
         <el-descriptions-item label="插单订单">{{ impactDetail.insertOrder ? impactDetail.insertOrder.orderCode : '' }}</el-descriptions-item>
+        <el-descriptions-item label="triggerProduct">{{ formatImpactProduct(impactDetail.triggerProduct) }}</el-descriptions-item>
+        <el-descriptions-item label="affectedProducts" :span="2">{{ formatAffectedProducts(impactDetail.affectedProducts) }}</el-descriptions-item>
         <el-descriptions-item label="原因" :span="2">{{ impactDetail.reason }}</el-descriptions-item>
       </el-descriptions>
       <el-input class="mt12" type="textarea" :rows="10" :value="prettyImpactJson" readonly />
@@ -187,8 +239,8 @@
         <el-form-item label="新方案ID" prop="newPlanId">
           <el-input v-model="form.newPlanId" placeholder="请输入新方案ID" />
         </el-form-item>
-        <el-form-item label="事件时间" prop="eventTime">
-          <el-date-picker clearable v-model="form.eventTime" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" placeholder="请选择事件时间" />
+        <el-form-item label="插单发生时间" prop="eventTime">
+          <el-date-picker clearable v-model="form.eventTime" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" placeholder="请选择插单发生时间" />
         </el-form-item>
         <el-form-item label="事件状态" prop="eventStatus">
           <el-input v-model="form.eventStatus" placeholder="请输入事件状态" />
@@ -219,18 +271,23 @@
 
 <script>
 import { listInsertEvent, getInsertEvent, delInsertEvent, addInsertEvent, updateInsertEvent, createAndAnalyzeInsertEvent, recommendStrategy, generateLocalReschedule, generateExplanationReport, generateAiExplanationReport } from "@/api/aps/insertEvent";
+import { listProduct } from "@/api/aps/product";
 
 export default {
   name: "InsertEvent",
   data() {
     return {
       loading: true,
+      productLoading: false,
+      productList: [],
+      selectedProductId: null,
       ids: [],
       single: true,
       multiple: true,
       showSearch: true,
       total: 0,
       insertEventList: [],
+      activeEventTab: "all",
       title: "",
       open: false,
       analyzeOpen: false,
@@ -261,21 +318,77 @@ export default {
     };
   },
   computed: {
+    selectedProduct() {
+      return this.productList.find(item => String(item.productId) === String(this.selectedProductId)) || null;
+    },
     prettyImpactJson() {
       return this.impactDetail ? JSON.stringify(this.impactDetail, null, 2) : "";
     }
   },
   created() {
-    this.getList();
+    this.loadProducts();
   },
   methods: {
+    loadProducts() {
+      this.productLoading = true;
+      listProduct({ pageNum: 1, pageSize: 200, status: "0" }).then(response => {
+        this.productList = response.rows || [];
+        this.selectedProductId = (this.productList[0] || {}).productId || null;
+        this.handleProductChange();
+      }).finally(() => {
+        this.productLoading = false;
+      });
+    },
+    handleProductChange() {
+      this.queryParams.pageNum = 1;
+      this.insertEventList = [];
+      this.total = 0;
+      if (this.selectedProductId) this.getList();
+    },
+    formatProductLabel(product) {
+      return `${product.productCode} / ${product.productName}`;
+    },
     getList() {
+      if (!this.selectedProductId) {
+        this.insertEventList = [];
+        this.total = 0;
+        return;
+      }
       this.loading = true;
-      listInsertEvent(this.queryParams).then(response => {
-        this.insertEventList = response.rows;
+      listInsertEvent(this.buildEventQuery()).then(response => {
+        this.insertEventList = response.rows || [];
         this.total = response.total;
+      }).finally(() => {
         this.loading = false;
       });
+    },
+    buildEventQuery() {
+      const query = { ...this.queryParams };
+      const filters = {
+        all: {},
+        new: { eventStatus: "NEW" },
+        analyzed: { eventStatus: "ANALYZED" },
+        rescheduled: { eventStatus: "RESCHEDULED" },
+        confirmed: { eventStatus: "CONFIRMED" },
+        rejected: { eventStatus: "REJECTED" }
+      };
+      return { ...query, ...(filters[this.activeEventTab] || {}), triggerProductId: this.selectedProductId };
+    },
+    handleEventTabChange() {
+      this.queryParams.pageNum = 1;
+      this.getList();
+    },
+    eventStatusTag(status) {
+      const tags = { NEW: "info", ANALYZED: "primary", RESCHEDULED: "warning", CONFIRMED: "success", REJECTED: "danger" };
+      return tags[status] || "info";
+    },
+    eventStatusLabel(status) {
+      const labels = { NEW: "待分析", ANALYZED: "已分析", RESCHEDULED: "已重调度", CONFIRMED: "已确认", REJECTED: "已拒绝" };
+      return labels[status] || status || "-";
+    },
+    formatPlanContext(planCode, planId) {
+      if (planCode && planId) return `${planCode} / ${planId}`;
+      return planCode || planId || "-";
     },
     cancel() {
       this.open = false;
@@ -328,14 +441,30 @@ export default {
       createAndAnalyzeInsertEvent(this.analyzeInsertOrderId).then(response => {
         this.$modal.msgSuccess("插单影响分析完成");
         this.analyzeOpen = false;
-        this.impactDetail = this.parseImpactJson(response.data.impactJson);
+        this.impactDetail = this.buildImpactDetail(response.data.impactJson);
         this.impactOpen = true;
         this.getList();
       });
     },
     handleViewImpact(row) {
-      this.impactDetail = this.parseImpactJson(row.impactJson);
+      this.impactDetail = this.buildImpactDetail(row.impactJson, row);
       this.impactOpen = true;
+    },
+    buildImpactDetail(impactJson, row) {
+      const impact = this.parseImpactJson(impactJson) || {};
+      if (!impact.triggerProduct && row) {
+        impact.triggerProduct = { productId: row.triggerProductId, productCode: row.triggerProductCode };
+      }
+      if (!Array.isArray(impact.affectedProducts)) impact.affectedProducts = [];
+      return impact;
+    },
+    formatImpactProduct(product) {
+      if (!product) return "-";
+      return product.productCode || product.productId || "-";
+    },
+    formatAffectedProducts(products) {
+      if (!products || !products.length) return "历史事件未记录受影响产品集合";
+      return products.map(this.formatImpactProduct).join("、");
     },
     handleRecommendStrategy(row) {
       recommendStrategy(row.eventId).then(response => {
@@ -458,7 +587,7 @@ export default {
     },
     handleExport() {
       this.download("aps/insertEvent/export", {
-        ...this.queryParams
+        ...this.buildEventQuery()
       }, `insertEvent_${new Date().getTime()}.xlsx`);
     }
   }
@@ -469,4 +598,18 @@ export default {
 .mt12 {
   margin-top: 12px;
 }
+
+.business-tabs {
+  margin-bottom: 12px;
+}
+
+.time-note {
+  margin-bottom: 12px;
+}
+
+.product-context-card { margin-bottom: 12px; border-radius: 4px; }
+.product-context-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.context-title { color: #303133; font-size: 16px; font-weight: 600; }
+.context-tip { margin-top: 5px; color: #909399; font-size: 12px; }
+.product-selector { width: 360px; }
 </style>

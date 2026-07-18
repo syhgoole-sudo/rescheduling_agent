@@ -120,6 +120,7 @@ class LocalRescheduleResponse(BaseModel):
     success: bool
     message: str
     algorithmName: str
+    randomSeed: Optional[int] = None
     strategyType: str
     taskSchedules: List[TaskScheduleDTO]
     kpi: Dict[str, Any]

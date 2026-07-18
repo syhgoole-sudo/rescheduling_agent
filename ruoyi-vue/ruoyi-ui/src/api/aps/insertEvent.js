@@ -44,7 +44,7 @@ export function generateLocalReschedule(eventId, algorithmType, randomSeed) {
     method: 'post',
     data: {
       algorithmType: algorithmType || 'RULE',
-      randomSeed: algorithmType === 'GA' ? seed : undefined
+      randomSeed: seed
     }
   })
 }

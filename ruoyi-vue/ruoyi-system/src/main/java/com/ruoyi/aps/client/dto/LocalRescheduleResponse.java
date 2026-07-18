@@ -9,6 +9,7 @@ public class LocalRescheduleResponse
     private Boolean success;
     private String message;
     private String algorithmName;
+    private Integer randomSeed;
     private String strategyType;
     private List<ScheduleTaskDTO> taskSchedules;
     private Map<String, Object> kpi;
@@ -23,6 +24,8 @@ public class LocalRescheduleResponse
     public void setMessage(String message) { this.message = message; }
     public String getAlgorithmName() { return algorithmName; }
     public void setAlgorithmName(String algorithmName) { this.algorithmName = algorithmName; }
+    public Integer getRandomSeed() { return randomSeed; }
+    public void setRandomSeed(Integer randomSeed) { this.randomSeed = randomSeed; }
     public String getStrategyType() { return strategyType; }
     public void setStrategyType(String strategyType) { this.strategyType = strategyType; }
     public List<ScheduleTaskDTO> getTaskSchedules() { return taskSchedules; }

@@ -13,15 +13,15 @@ TOURNAMENT_SIZE = 3
 
 
 def local_reschedule_by_ga(request: LocalRescheduleRequest) -> Tuple[List[TaskScheduleDTO], Dict[str, Any], List[str]]:
-    chromosome_seed = build_order_sequence_rule(request)
-    if len(chromosome_seed) <= 1:
-        tasks, kpi, warnings = decode_local_reschedule(request, chromosome_seed)
-        kpi["randomSeed"] = _resolve_random_seed(request.strategyConfig or {})
-        return tasks, kpi, warnings
-
     config = request.strategyConfig or {}
     random_seed = _resolve_random_seed(config)
     rng = random.Random(random_seed)
+    chromosome_seed = build_order_sequence_rule(request)
+    if len(chromosome_seed) <= 1:
+        tasks, kpi, warnings = decode_local_reschedule(request, chromosome_seed)
+        kpi["randomSeed"] = random_seed
+        return tasks, kpi, warnings
+
     population_size = int(config.get("populationSize", DEFAULT_POPULATION_SIZE))
     generations = int(config.get("generations", DEFAULT_GENERATIONS))
     crossover_rate = float(config.get("crossoverRate", DEFAULT_CROSSOVER_RATE))

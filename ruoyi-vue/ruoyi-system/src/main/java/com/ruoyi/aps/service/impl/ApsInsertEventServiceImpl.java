@@ -285,11 +285,9 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
             throw new IllegalStateException("Please recommend strategy before generating local reschedule plan.");
         }
         String normalizedAlgorithmType = normalizeAlgorithmType(algorithmType);
+        Integer requestedRandomSeed = randomSeed == null ? 42 : randomSeed;
         strategy.put("algorithmType", normalizedAlgorithmType);
-        if ("GA".equals(normalizedAlgorithmType))
-        {
-            strategy.put("randomSeed", randomSeed == null ? 42 : randomSeed);
-        }
+        strategy.put("randomSeed", requestedRandomSeed);
         Set<Long> affectedTaskIds = parseLongSet(impact.get("affectedTaskIds"));
 
         ApsSchedulePlan sourcePlan = apsSchedulePlanMapper.selectApsSchedulePlanById(event.getSourcePlanId());
@@ -341,13 +339,15 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         {
             throw new IllegalStateException("Python local reschedule service did not return task schedules.");
         }
+        if (response.getKpi() == null)
+        {
+            response.setKpi(new LinkedHashMap<>());
+        }
+        Integer usedRandomSeed = response.getRandomSeed() == null
+                ? requestedRandomSeed : response.getRandomSeed();
         if ("GA".equals(normalizedAlgorithmType))
         {
-            if (response.getKpi() == null)
-            {
-                response.setKpi(new LinkedHashMap<>());
-            }
-            response.getKpi().putIfAbsent("randomSeed", strategy.get("randomSeed"));
+            response.getKpi().put("randomSeed", usedRandomSeed);
         }
 
         ApsSchedulePlan newPlan = buildReschedulePlan(sourcePlan, event, response, scheduleStartTime, operatorName);
@@ -369,10 +369,12 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         result.put("sourcePlanId", sourcePlan.getPlanId());
         result.put("eventId", event.getEventId());
         result.put("taskCount", response.getTaskSchedules().size());
+        result.put("algorithmType", normalizedAlgorithmType);
+        result.put("algorithmName", response.getAlgorithmName());
         result.put("kpi", response.getKpi());
         if ("GA".equals(normalizedAlgorithmType))
         {
-            result.put("randomSeed", strategy.get("randomSeed"));
+            result.put("randomSeed", usedRandomSeed);
         }
         result.put("warnings", response.getWarnings());
         return result;

@@ -1,0 +1,21 @@
+# Environment variable template for APS/RuoYi configuration.
+# This file is not activated automatically. Keep real production secrets outside Git.
+
+spring:
+  datasource:
+    druid:
+      master:
+        url: '${MYSQL_URL:jdbc:mysql://localhost:3306/ry-vue?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8}'
+        username: '${MYSQL_USERNAME:root}'
+        password: '${MYSQL_PASSWORD:1234}'
+      slave:
+        enabled: '${MYSQL_SLAVE_ENABLED:false}'
+        url: '${MYSQL_SLAVE_URL:}'
+        username: '${MYSQL_SLAVE_USERNAME:}'
+        password: '${MYSQL_SLAVE_PASSWORD:}'
+      statViewServlet:
+        login-username: '${DRUID_USERNAME:ruoyi}'
+        login-password: '${DRUID_PASSWORD:123456}'
+
+token:
+  secret: '${JWT_SECRET:abcdefghijklmnopqrstuvwxyz}'

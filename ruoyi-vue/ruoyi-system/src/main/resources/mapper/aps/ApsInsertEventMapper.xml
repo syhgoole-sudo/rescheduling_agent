@@ -95,6 +95,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where event_id = #{eventId}
     </update>
 
+    <select id="countBySourcePlanId" parameterType="Long" resultType="int">
+        select count(1) from aps_insert_event where source_plan_id = #{sourcePlanId}
+    </select>
+
+    <select id="countByNewPlanId" parameterType="Long" resultType="int">
+        select count(1) from aps_insert_event where new_plan_id = #{newPlanId}
+    </select>
+
     <delete id="deleteApsInsertEventById" parameterType="Long">
         delete from aps_insert_event where event_id = #{eventId}
     </delete>

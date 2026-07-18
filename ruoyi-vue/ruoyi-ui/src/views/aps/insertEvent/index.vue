@@ -136,6 +136,8 @@
         <el-descriptions-item label="原方案ID">{{ rescheduleDetail.sourcePlanId }}</el-descriptions-item>
         <el-descriptions-item label="事件ID">{{ rescheduleDetail.eventId }}</el-descriptions-item>
         <el-descriptions-item label="任务数量">{{ rescheduleDetail.taskCount }}</el-descriptions-item>
+        <el-descriptions-item label="算法">{{ rescheduleDetail.algorithmType || rescheduleDetail.algorithmName }}</el-descriptions-item>
+        <el-descriptions-item v-if="rescheduleDetail.randomSeed !== undefined" label="randomSeed">{{ rescheduleDetail.randomSeed }}</el-descriptions-item>
         <el-descriptions-item label="KPI" :span="2">{{ formatKpi(rescheduleDetail.kpi) }}</el-descriptions-item>
         <el-descriptions-item label="提示" :span="2">可到“调度方案”页面查看新方案、任务明细和甘特图。</el-descriptions-item>
       </el-descriptions>

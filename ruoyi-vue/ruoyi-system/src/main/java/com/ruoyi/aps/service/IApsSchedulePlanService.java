@@ -19,9 +19,9 @@ public interface IApsSchedulePlanService
 
     public int updateApsSchedulePlan(ApsSchedulePlan apsSchedulePlan);
 
-    public int deleteApsSchedulePlanByIds(Long[] planIds);
+    public int deleteApsSchedulePlanByIds(Long[] planIds, String operatorName);
 
-    public int deleteApsSchedulePlanById(Long planId);
+    public int deleteApsSchedulePlanById(Long planId, String operatorName);
 
     public Map<String, Object> generateInitialSchedule(String username);
 

@@ -65,12 +65,40 @@ Java 后端不直接写复杂排产算法，Python 算法服务不直接访问 M
 
 ### 启动 MySQL
 
-默认连接信息：
+未设置环境变量时使用本地开发默认值：
 
 - database：`ry-vue`
 - username：`root`
 - password：`1234`
 - port：`3306`
+
+数据库、Druid 监控账号和 JWT 密钥均支持通过环境变量覆盖：
+
+| 环境变量 | 本地默认值 | 用途 |
+| --- | --- | --- |
+| `MYSQL_URL` | `jdbc:mysql://localhost:3306/ry-vue?...` | MySQL JDBC URL |
+| `MYSQL_USERNAME` | `root` | MySQL 用户名 |
+| `MYSQL_PASSWORD` | `1234` | MySQL 密码 |
+| `MYSQL_SLAVE_ENABLED` | `false` | 是否启用从库 |
+| `MYSQL_SLAVE_URL` | 空 | 从库 JDBC URL |
+| `MYSQL_SLAVE_USERNAME` | 空 | 从库用户名 |
+| `MYSQL_SLAVE_PASSWORD` | 空 | 从库密码 |
+| `DRUID_USERNAME` | `ruoyi` | Druid 监控用户名 |
+| `DRUID_PASSWORD` | `123456` | Druid 监控密码 |
+| `JWT_SECRET` | `abcdefghijklmnopqrstuvwxyz` | JWT 签名密钥 |
+
+本地环境可以不设置任何变量直接启动。部署或推送公开仓库时，应在操作系统、容器编排或密钥管理服务中提供实际值，不要把真实密码、Token 或 API Key 写入 YAML。PowerShell 示例：
+
+```powershell
+$env:MYSQL_URL='jdbc:mysql://localhost:3306/ry-vue?useUnicode=true&characterEncoding=utf8&serverTimezone=GMT%2B8'
+$env:MYSQL_USERNAME='root'
+$env:MYSQL_PASSWORD='replace-with-local-password'
+$env:DRUID_USERNAME='replace-with-monitor-user'
+$env:DRUID_PASSWORD='replace-with-monitor-password'
+$env:JWT_SECRET='replace-with-a-long-random-secret'
+```
+
+配置模板见 `ruoyi-admin/src/main/resources/application-example.yml`。模板中的默认值仅用于本地开发，生产环境必须覆盖密码和 JWT 密钥。
 
 Windows 服务方式示例：
 

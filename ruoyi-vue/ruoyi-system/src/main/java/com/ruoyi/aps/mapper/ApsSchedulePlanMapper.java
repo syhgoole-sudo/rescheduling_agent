@@ -1,6 +1,7 @@
 package com.ruoyi.aps.mapper;
 
 import java.util.List;
+import org.apache.ibatis.annotations.Param;
 import com.ruoyi.aps.domain.ApsSchedulePlan;
 
 /**
@@ -20,9 +21,10 @@ public interface ApsSchedulePlanMapper
 
     public int updateApsSchedulePlan(ApsSchedulePlan apsSchedulePlan);
 
-    public int deleteApsSchedulePlanById(Long planId);
+    public int softDeleteApsSchedulePlanById(@Param("planId") Long planId,
+            @Param("operatorName") String operatorName);
 
-    public int deleteApsSchedulePlanByIds(Long[] planIds);
+    public int countReschedulePlansBySourcePlanId(Long sourcePlanId);
 
     public int archiveActiveInitialPlans();
 }

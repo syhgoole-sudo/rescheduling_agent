@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
@@ -89,22 +90,37 @@ public class ApsInsertEventController extends BaseController
     @PreAuthorize("@ss.hasPermi('aps:insertEvent:add')")
     @Log(title = "插单局部重调度", businessType = BusinessType.INSERT)
     @PostMapping("/generateLocalReschedule/{eventId}")
-    public AjaxResult generateLocalReschedule(@PathVariable("eventId") Long eventId, @RequestBody(required = false) Map<String, Object> body)
+    public AjaxResult generateLocalReschedule(@PathVariable("eventId") Long eventId,
+            @RequestParam(value = "algorithmType", required = false) String queryAlgorithmType,
+            @RequestParam(value = "randomSeed", required = false) Integer queryRandomSeed,
+            @RequestBody(required = false) Map<String, Object> body)
     {
-        String algorithmType = body == null || body.get("algorithmType") == null ? "RULE" : body.get("algorithmType").toString();
-        Integer randomSeed = parseRandomSeed(body == null ? null : body.get("randomSeed"));
-        Map<String, Object> result = apsInsertEventService.generateLocalReschedule(eventId, getUsername(), algorithmType);
-        result.putIfAbsent("randomSeed", randomSeed);
+        Object bodyAlgorithmType = body == null ? null : body.get("algorithmType");
+        String algorithmType = parseAlgorithmType(bodyAlgorithmType, queryAlgorithmType);
+        Object bodyRandomSeed = body == null ? null : body.get("randomSeed");
+        Integer randomSeed = parseRandomSeed(bodyRandomSeed, queryRandomSeed);
+        Map<String, Object> result = apsInsertEventService.generateLocalReschedule(
+                eventId, getUsername(), algorithmType, randomSeed);
         return AjaxResult.success(result);
     }
 
-    private Integer parseRandomSeed(Object value)
+    private String parseAlgorithmType(Object bodyValue, String queryValue)
     {
-        if (value == null || value.toString().trim().isEmpty())
+        String value = bodyValue == null ? null : bodyValue.toString();
+        if (value == null || value.trim().isEmpty())
         {
-            return 42;
+            value = queryValue;
         }
-        return Integer.valueOf(value.toString());
+        return value == null || value.trim().isEmpty() ? "RULE" : value.trim();
+    }
+
+    private Integer parseRandomSeed(Object bodyValue, Integer queryValue)
+    {
+        if (bodyValue != null && !bodyValue.toString().trim().isEmpty())
+        {
+            return Integer.valueOf(bodyValue.toString());
+        }
+        return queryValue == null ? 42 : queryValue;
     }
 
     @PreAuthorize("@ss.hasPermi('aps:insertEvent:list')")

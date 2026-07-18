@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +38,7 @@ import com.ruoyi.aps.mapper.ApsRouteOperationMapper;
 import com.ruoyi.aps.mapper.ApsSchedulePlanMapper;
 import com.ruoyi.aps.mapper.ApsScheduleTaskMapper;
 import com.ruoyi.aps.service.IApsSchedulePlanService;
+import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 
 @Service
@@ -83,6 +85,7 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
     @Override
     public int insertApsSchedulePlan(ApsSchedulePlan apsSchedulePlan)
     {
+        apsSchedulePlan.setDelFlag("0");
         return apsSchedulePlanMapper.insertApsSchedulePlan(apsSchedulePlan);
     }
 
@@ -93,15 +96,79 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
     }
 
     @Override
-    public int deleteApsSchedulePlanByIds(Long[] planIds)
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteApsSchedulePlanByIds(Long[] planIds, String operatorName)
     {
-        return apsSchedulePlanMapper.deleteApsSchedulePlanByIds(planIds);
+        if (planIds == null || planIds.length == 0)
+        {
+            throw new ServiceException("请选择要删除的调度方案");
+        }
+        for (Long planId : planIds)
+        {
+            validatePlanCanBeDeleted(planId);
+        }
+
+        int deletedCount = 0;
+        for (Long planId : planIds)
+        {
+            int planRows = apsSchedulePlanMapper.softDeleteApsSchedulePlanById(planId, operatorName);
+            if (planRows != 1)
+            {
+                throw new ServiceException("调度方案删除失败，方案可能已被删除或状态已变化");
+            }
+            apsScheduleTaskMapper.softDeleteApsScheduleTasksByPlanId(planId, operatorName);
+            deletedCount += planRows;
+        }
+        return deletedCount;
     }
 
     @Override
-    public int deleteApsSchedulePlanById(Long planId)
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteApsSchedulePlanById(Long planId, String operatorName)
     {
-        return apsSchedulePlanMapper.deleteApsSchedulePlanById(planId);
+        validatePlanCanBeDeleted(planId);
+        int planRows = apsSchedulePlanMapper.softDeleteApsSchedulePlanById(planId, operatorName);
+        if (planRows != 1)
+        {
+            throw new ServiceException("调度方案删除失败，方案可能已被删除或状态已变化");
+        }
+        apsScheduleTaskMapper.softDeleteApsScheduleTasksByPlanId(planId, operatorName);
+        return planRows;
+    }
+
+    private void validatePlanCanBeDeleted(Long planId)
+    {
+        if (planId == null)
+        {
+            throw new ServiceException("调度方案ID不能为空");
+        }
+        ApsSchedulePlan plan = apsSchedulePlanMapper.selectApsSchedulePlanById(planId);
+        if (plan == null)
+        {
+            throw new ServiceException("调度方案不存在或已删除");
+        }
+        String planStatus = plan.getPlanStatus();
+        if ("Y".equalsIgnoreCase(plan.getActiveFlag()))
+        {
+            throw new ServiceException("当前激活方案禁止删除");
+        }
+        if ("ACTIVE".equalsIgnoreCase(planStatus) || "CONFIRMED".equalsIgnoreCase(planStatus))
+        {
+            throw new ServiceException("ACTIVE 或 CONFIRMED 方案禁止删除");
+        }
+        if ("HISTORY".equalsIgnoreCase(planStatus))
+        {
+            throw new ServiceException("HISTORY 方案属于历史追溯记录，禁止删除");
+        }
+        if (plan.getEventId() != null || apsInsertEventMapper.countBySourcePlanId(planId) > 0
+                || apsInsertEventMapper.countByNewPlanId(planId) > 0)
+        {
+            throw new ServiceException("该方案已关联插单事件，禁止删除");
+        }
+        if (apsSchedulePlanMapper.countReschedulePlansBySourcePlanId(planId) > 0)
+        {
+            throw new ServiceException("该方案已关联重调度方案，禁止删除");
+        }
     }
 
     @Override
@@ -185,8 +252,10 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
             throw new IllegalStateException("原方案不存在");
         }
 
-        List<ApsScheduleTask> originalTasks = apsScheduleTaskMapper.selectApsScheduleTaskListByPlanId(sourcePlan.getPlanId());
-        List<ApsScheduleTask> newTasks = apsScheduleTaskMapper.selectApsScheduleTaskListByPlanId(newPlan.getPlanId());
+        List<ApsScheduleTask> originalTasks = activeTasks(
+                apsScheduleTaskMapper.selectApsScheduleTaskListByPlanId(sourcePlan.getPlanId()));
+        List<ApsScheduleTask> newTasks = activeTasks(
+                apsScheduleTaskMapper.selectApsScheduleTaskListByPlanId(newPlan.getPlanId()));
         Map<String, Object> originalKpi = calculatePlanKpi(originalTasks);
         Map<String, Object> newKpi = calculatePlanKpi(newTasks);
         Map<Long, Date> originalFinishByOrder = calculateOrderFinishTimes(originalTasks);
@@ -255,6 +324,15 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
         insertOrderCompare.put("insertOrderDelayMinutes", insertOrderTrueDelayMinutes);
         insertOrderCompare.put("insertOrderTrueDelayMinutes", insertOrderTrueDelayMinutes);
 
+        List<Map<String, Object>> changedTaskDetails = buildChangedTaskDetails(originalTasks, newTasks);
+        List<Map<String, Object>> affectedOrderDetails = buildAffectedOrderDetails(
+                originalTasks, newTasks, originalFinishByOrder, newFinishByOrder,
+                changedTaskDetails, insertOrder == null ? null : insertOrder.getOrderId());
+        Map<String, Object> decisionEvidence = buildDecisionEvidence(
+                affectedOrderDetails, changedTaskDetails, insertFinishTime,
+                insertOrderTrueDelayMinutes, newTrueDelayOrderCount - originalTrueDelayOrderCount,
+                changedTaskCount, changedTaskRatio, stabilityCompare);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("sourcePlanId", sourcePlan.getPlanId());
         result.put("newPlanId", newPlan.getPlanId());
@@ -268,6 +346,9 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
         result.put("delayCompare", delayCompare);
         result.put("makespanCompare", makespanCompare);
         result.put("insertOrderCompare", insertOrderCompare);
+        result.put("affectedOrderDetails", affectedOrderDetails);
+        result.put("changedTaskDetails", changedTaskDetails);
+        result.put("decisionEvidence", decisionEvidence);
         result.put("conclusion", buildCompareConclusion(insertOrderTrueDelayMinutes,
                 newTrueDelayOrderCount - originalTrueDelayOrderCount,
                 newTrueTotalDelayMinutes - originalTrueTotalDelayMinutes,
@@ -275,6 +356,339 @@ public class ApsSchedulePlanServiceImpl implements IApsSchedulePlanService
                 getLong(stabilityCompare, "stabilityTotalDelayMinutes"),
                 (Long) makespanCompare.get("makespanDiffMinutes")));
         return result;
+    }
+
+    private List<Map<String, Object>> buildChangedTaskDetails(List<ApsScheduleTask> originalTasks,
+            List<ApsScheduleTask> newTasks)
+    {
+        Map<Long, ApsScheduleTask> originalByTaskId = originalTasks.stream()
+                .filter(task -> task.getTaskId() != null)
+                .collect(Collectors.toMap(ApsScheduleTask::getTaskId, task -> task, (left, right) -> left));
+        Map<String, ApsScheduleTask> originalByOrderProcess = originalTasks.stream()
+                .filter(task -> taskMatchKey(task) != null)
+                .collect(Collectors.toMap(this::taskMatchKey, task -> task, (left, right) -> left));
+
+        List<Map<String, Object>> details = new ArrayList<>();
+        for (ApsScheduleTask newTask : newTasks)
+        {
+            ApsScheduleTask originalTask = newTask.getSourceTaskId() == null
+                    ? null : originalByTaskId.get(newTask.getSourceTaskId());
+            if (originalTask == null && taskMatchKey(newTask) != null)
+            {
+                originalTask = originalByOrderProcess.get(taskMatchKey(newTask));
+            }
+
+            boolean inserted = "Y".equalsIgnoreCase(newTask.getIsInserted()) || originalTask == null;
+            boolean timeChanged = !inserted && (!Objects.equals(originalTask.getPlannedStartTime(), newTask.getPlannedStartTime())
+                    || !Objects.equals(originalTask.getPlannedEndTime(), newTask.getPlannedEndTime()));
+            boolean equipmentChanged = !inserted
+                    && !Objects.equals(originalTask.getEquipmentId(), newTask.getEquipmentId());
+            boolean frozen = "Y".equalsIgnoreCase(newTask.getIsFrozen());
+            boolean flaggedChanged = "Y".equalsIgnoreCase(newTask.getIsChanged());
+            if (!inserted && !timeChanged && !equipmentChanged && !frozen && !flaggedChanged)
+            {
+                continue;
+            }
+
+            String changeType = resolveTaskChangeType(inserted, timeChanged, equipmentChanged, frozen);
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("taskId", newTask.getTaskId());
+            detail.put("sourceTaskId", newTask.getSourceTaskId());
+            detail.put("orderId", newTask.getOrderId());
+            detail.put("orderCode", newTask.getOrderCode());
+            detail.put("processSeq", newTask.getProcessSeq());
+            detail.put("processCode", newTask.getProcessCode());
+            detail.put("equipmentGroupId", newTask.getEquipmentGroupId());
+            detail.put("originalEquipmentGroupId", originalTask == null ? null : originalTask.getEquipmentGroupId());
+            detail.put("equipmentId", newTask.getEquipmentId());
+            detail.put("equipmentCode", newTask.getEquipmentCode());
+            detail.put("originalEquipmentId", originalTask == null ? null : originalTask.getEquipmentId());
+            detail.put("originalEquipmentCode", originalTask == null ? null : originalTask.getEquipmentCode());
+            detail.put("originalStartTime", formatDate(originalTask == null ? null : originalTask.getPlannedStartTime()));
+            detail.put("originalEndTime", formatDate(originalTask == null ? null : originalTask.getPlannedEndTime()));
+            detail.put("newStartTime", formatDate(newTask.getPlannedStartTime()));
+            detail.put("newEndTime", formatDate(newTask.getPlannedEndTime()));
+            detail.put("startShiftMinutes", originalTask == null ? null
+                    : minutesBetween(originalTask.getPlannedStartTime(), newTask.getPlannedStartTime()));
+            detail.put("endShiftMinutes", originalTask == null ? null
+                    : minutesBetween(originalTask.getPlannedEndTime(), newTask.getPlannedEndTime()));
+            detail.put("isInserted", inserted ? "Y" : valueOrDefault(newTask.getIsInserted(), "N"));
+            detail.put("isChanged", valueOrDefault(newTask.getIsChanged(), "N"));
+            detail.put("isFrozen", valueOrDefault(newTask.getIsFrozen(), "N"));
+            detail.put("changeType", changeType);
+            details.add(detail);
+        }
+        details.sort(Comparator
+                .comparing((Map<String, Object> item) -> changeTypeRank((String) item.get("changeType")))
+                .thenComparing(item -> (String) item.get("orderCode"), Comparator.nullsLast(String::compareTo))
+                .thenComparing(item -> (Integer) item.get("processSeq"), Comparator.nullsLast(Integer::compareTo)));
+        return details;
+    }
+
+    private List<Map<String, Object>> buildAffectedOrderDetails(List<ApsScheduleTask> originalTasks,
+            List<ApsScheduleTask> newTasks, Map<Long, Date> originalFinishByOrder,
+            Map<Long, Date> newFinishByOrder, List<Map<String, Object>> changedTaskDetails,
+            Long insertOrderId)
+    {
+        Map<Long, List<Map<String, Object>>> detailByOrder = changedTaskDetails.stream()
+                .filter(detail -> detail.get("orderId") != null)
+                .collect(Collectors.groupingBy(detail -> (Long) detail.get("orderId")));
+        Map<Long, ApsScheduleTask> originalTaskByOrder = firstTaskByOrder(originalTasks);
+        Map<Long, ApsScheduleTask> newTaskByOrder = firstTaskByOrder(newTasks);
+        Set<Long> orderIds = new LinkedHashSet<>();
+        orderIds.addAll(newFinishByOrder.keySet());
+        orderIds.addAll(detailByOrder.keySet());
+
+        List<Map<String, Object>> details = new ArrayList<>();
+        for (Long orderId : orderIds)
+        {
+            ApsOrder order = apsOrderMapper.selectApsOrderById(orderId);
+            Date originalFinishTime = originalFinishByOrder.get(orderId);
+            Date newFinishTime = newFinishByOrder.get(orderId);
+            List<Map<String, Object>> taskDetails = detailByOrder.getOrDefault(orderId, new ArrayList<>());
+            long insertedTaskCount = taskDetails.stream()
+                    .filter(detail -> "Y".equals(detail.get("isInserted"))).count();
+            long frozenTaskCount = newTasks.stream()
+                    .filter(task -> orderId.equals(task.getOrderId()) && "Y".equalsIgnoreCase(task.getIsFrozen())).count();
+            long changedTaskCount = taskDetails.stream()
+                    .filter(detail -> !"Y".equals(detail.get("isInserted")) && isActualTaskImpact(detail)).count();
+            boolean insertOrder = orderId.equals(insertOrderId)
+                    || (order != null && "INSERT".equalsIgnoreCase(order.getOrderType()));
+
+            String impactType;
+            if (insertOrder)
+            {
+                impactType = "INSERTED";
+            }
+            else if (originalFinishTime != null && newFinishTime != null && newFinishTime.after(originalFinishTime))
+            {
+                impactType = "DELAYED";
+            }
+            else if (originalFinishTime != null && newFinishTime != null && newFinishTime.before(originalFinishTime))
+            {
+                impactType = "ADVANCED";
+            }
+            else if (changedTaskCount > 0 || insertedTaskCount > 0)
+            {
+                impactType = "CHANGED";
+            }
+            else
+            {
+                impactType = "UNCHANGED";
+            }
+            if ("UNCHANGED".equals(impactType))
+            {
+                continue;
+            }
+
+            ApsScheduleTask displayTask = newTaskByOrder.getOrDefault(orderId, originalTaskByOrder.get(orderId));
+            Date dueTime = order == null ? null : order.getDueTime();
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("orderId", orderId);
+            detail.put("orderCode", order == null
+                    ? (displayTask == null ? null : displayTask.getOrderCode()) : order.getOrderCode());
+            detail.put("priorityLevel", order == null ? null : order.getPriorityLevel());
+            detail.put("orderType", order == null ? null : order.getOrderType());
+            detail.put("dueTime", formatDate(dueTime));
+            detail.put("originalFinishTime", formatDate(originalFinishTime));
+            detail.put("newFinishTime", formatDate(newFinishTime));
+            detail.put("trueDelayMinutes", dueTime == null || newFinishTime == null
+                    ? 0L : Math.max(0L, minutesBetween(dueTime, newFinishTime)));
+            detail.put("stabilityDelayMinutes", originalFinishTime == null || newFinishTime == null
+                    ? 0L : Math.max(0L, minutesBetween(originalFinishTime, newFinishTime)));
+            detail.put("changedTaskCount", changedTaskCount);
+            detail.put("insertedTaskCount", insertedTaskCount);
+            detail.put("frozenTaskCount", frozenTaskCount);
+            detail.put("impactType", impactType);
+            details.add(detail);
+        }
+        details.sort(Comparator
+                .comparing((Map<String, Object> item) -> impactTypeRank((String) item.get("impactType")))
+                .thenComparing(item -> (String) item.get("orderCode"), Comparator.nullsLast(String::compareTo)));
+        return details;
+    }
+
+    private Map<String, Object> buildDecisionEvidence(List<Map<String, Object>> affectedOrderDetails,
+            List<Map<String, Object>> changedTaskDetails, Date insertFinishTime,
+            long insertOrderTrueDelayMinutes, long trueDelayOrderCountDiff,
+            long changedTaskCount, double changedTaskRatio, Map<String, Object> stabilityCompare)
+    {
+        long delayedOrderCount = affectedOrderDetails.stream()
+                .filter(detail -> "DELAYED".equals(detail.get("impactType"))).count();
+        long advancedOrderCount = affectedOrderDetails.stream()
+                .filter(detail -> "ADVANCED".equals(detail.get("impactType"))).count();
+        Set<Long> equipmentGroupIds = new LinkedHashSet<>();
+        for (Map<String, Object> detail : changedTaskDetails)
+        {
+            if (!isActualTaskImpact(detail))
+            {
+                continue;
+            }
+            addLong(equipmentGroupIds, detail.get("equipmentGroupId"));
+            addLong(equipmentGroupIds, detail.get("originalEquipmentGroupId"));
+        }
+        List<Map<String, Object>> affectedEquipmentGroups = equipmentGroupIds.stream()
+                .map(this::toEquipmentGroupEvidence)
+                .collect(Collectors.toList());
+
+        long maxStabilityDelayMinutes = getLong(stabilityCompare, "stabilityMaxDelayMinutes");
+        long totalStabilityDelayMinutes = getLong(stabilityCompare, "stabilityTotalDelayMinutes");
+        boolean insertOrderOnTime = insertFinishTime != null && insertOrderTrueDelayMinutes <= 0L;
+
+        // These thresholds are an explainable operator aid, not an automatic confirmation rule.
+        String recommendationLevel;
+        String recommendationReason;
+        if (insertFinishTime == null)
+        {
+            recommendationLevel = "CAUTION";
+            recommendationReason = "未识别到插单完工时间，需要人工核验任务完整性。";
+        }
+        else if (insertOrderTrueDelayMinutes > 0L)
+        {
+            recommendationLevel = "NOT_RECOMMENDED";
+            recommendationReason = "插单未按真实交期完成。";
+        }
+        else if (trueDelayOrderCountDiff <= 0L && changedTaskRatio <= 0.20D
+                && maxStabilityDelayMinutes <= 60L)
+        {
+            recommendationLevel = "RECOMMENDED";
+            recommendationReason = "插单按期完成，未新增真实延期订单，且计划扰动处于辅助阈值内。";
+        }
+        else
+        {
+            recommendationLevel = "CAUTION";
+            recommendationReason = "插单按期完成，但存在新增真实延期或较明显的计划扰动。";
+        }
+
+        Map<String, Object> evidence = new LinkedHashMap<>();
+        evidence.put("insertOrderOnTime", insertOrderOnTime);
+        evidence.put("insertOrderTrueDelayMinutes", insertOrderTrueDelayMinutes);
+        evidence.put("affectedOrderCount", affectedOrderDetails.size());
+        evidence.put("delayedOrderCount", delayedOrderCount);
+        evidence.put("advancedOrderCount", advancedOrderCount);
+        evidence.put("changedTaskCount", changedTaskCount);
+        evidence.put("changedTaskRatio", changedTaskRatio);
+        evidence.put("maxStabilityDelayMinutes", maxStabilityDelayMinutes);
+        evidence.put("totalStabilityDelayMinutes", totalStabilityDelayMinutes);
+        evidence.put("affectedEquipmentGroupCount", affectedEquipmentGroups.size());
+        evidence.put("affectedEquipmentGroups", affectedEquipmentGroups);
+        evidence.put("recommendationLevel", recommendationLevel);
+        evidence.put("recommendationReason", recommendationReason);
+        evidence.put("recommendationRule",
+                "插单延期则 NOT_RECOMMENDED；插单按期、无新增真实延期、变更比例不超过20%且最大后移不超过60分钟则 RECOMMENDED；其余为 CAUTION。");
+        evidence.put("advisoryOnly", true);
+        return evidence;
+    }
+
+    private Map<Long, ApsScheduleTask> firstTaskByOrder(List<ApsScheduleTask> tasks)
+    {
+        return tasks.stream()
+                .filter(task -> task.getOrderId() != null)
+                .collect(Collectors.toMap(ApsScheduleTask::getOrderId, task -> task, (left, right) -> left));
+    }
+
+    private List<ApsScheduleTask> activeTasks(List<ApsScheduleTask> tasks)
+    {
+        if (tasks == null)
+        {
+            return new ArrayList<>();
+        }
+        return tasks.stream()
+                .filter(task -> task.getDelFlag() == null || "0".equals(task.getDelFlag()))
+                .collect(Collectors.toList());
+    }
+
+    private String taskMatchKey(ApsScheduleTask task)
+    {
+        return task.getOrderId() == null || task.getProcessSeq() == null
+                ? null : task.getOrderId() + "#" + task.getProcessSeq();
+    }
+
+    private String resolveTaskChangeType(boolean inserted, boolean timeChanged,
+            boolean equipmentChanged, boolean frozen)
+    {
+        if (inserted)
+        {
+            return "INSERTED";
+        }
+        if (timeChanged && equipmentChanged)
+        {
+            return "TIME_AND_EQUIPMENT_CHANGED";
+        }
+        if (equipmentChanged)
+        {
+            return "EQUIPMENT_CHANGED";
+        }
+        if (timeChanged)
+        {
+            return "TIME_SHIFTED";
+        }
+        return frozen ? "FROZEN" : "UNCHANGED";
+    }
+
+    private boolean isActualTaskImpact(Map<String, Object> detail)
+    {
+        String changeType = (String) detail.get("changeType");
+        return "Y".equals(detail.get("isInserted")) || "Y".equals(detail.get("isChanged"))
+                || "TIME_SHIFTED".equals(changeType) || "EQUIPMENT_CHANGED".equals(changeType)
+                || "TIME_AND_EQUIPMENT_CHANGED".equals(changeType) || "INSERTED".equals(changeType);
+    }
+
+    private int changeTypeRank(String changeType)
+    {
+        if ("INSERTED".equals(changeType))
+        {
+            return 0;
+        }
+        if ("TIME_AND_EQUIPMENT_CHANGED".equals(changeType) || "EQUIPMENT_CHANGED".equals(changeType))
+        {
+            return 1;
+        }
+        if ("TIME_SHIFTED".equals(changeType))
+        {
+            return 2;
+        }
+        return "FROZEN".equals(changeType) ? 3 : 4;
+    }
+
+    private int impactTypeRank(String impactType)
+    {
+        if ("INSERTED".equals(impactType))
+        {
+            return 0;
+        }
+        if ("DELAYED".equals(impactType))
+        {
+            return 1;
+        }
+        if ("ADVANCED".equals(impactType))
+        {
+            return 2;
+        }
+        return 3;
+    }
+
+    private Map<String, Object> toEquipmentGroupEvidence(Long equipmentGroupId)
+    {
+        ApsEquipmentGroup group = apsEquipmentGroupMapper.selectApsEquipmentGroupById(equipmentGroupId);
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("equipmentGroupId", equipmentGroupId);
+        item.put("equipmentGroupCode", group == null ? null : group.getEquipmentGroupCode());
+        item.put("equipmentGroupName", group == null ? null : group.getEquipmentGroupName());
+        return item;
+    }
+
+    private void addLong(Set<Long> values, Object value)
+    {
+        if (value instanceof Number)
+        {
+            values.add(((Number) value).longValue());
+        }
+    }
+
+    private String valueOrDefault(String value, String defaultValue)
+    {
+        return value == null || value.trim().isEmpty() ? defaultValue : value;
     }
 
     @Override

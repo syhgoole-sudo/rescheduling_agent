@@ -18,6 +18,10 @@ public interface ApsInsertEventMapper
 
     public int updateApsInsertEvent(ApsInsertEvent apsInsertEvent);
 
+    public int countBySourcePlanId(Long sourcePlanId);
+
+    public int countByNewPlanId(Long newPlanId);
+
     public int deleteApsInsertEventById(Long eventId);
 
     public int deleteApsInsertEventByIds(Long[] eventIds);

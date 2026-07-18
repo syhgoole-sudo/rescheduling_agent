@@ -25,7 +25,7 @@ public interface IApsScheduleTaskService
 
     public int updateApsScheduleTask(ApsScheduleTask apsScheduleTask);
 
-    public int deleteApsScheduleTaskByIds(Long[] taskIds);
+    public int deleteApsScheduleTaskByIds(Long[] taskIds, String operatorName);
 
-    public int deleteApsScheduleTaskById(Long taskId);
+    public int deleteApsScheduleTaskById(Long taskId, String operatorName);
 }

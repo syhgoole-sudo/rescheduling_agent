@@ -27,7 +27,12 @@ public interface ApsScheduleTaskMapper
 
     public int updateApsScheduleTask(ApsScheduleTask apsScheduleTask);
 
-    public int deleteApsScheduleTaskById(Long taskId);
+    public int softDeleteApsScheduleTaskById(@Param("taskId") Long taskId,
+            @Param("operatorName") String operatorName);
 
-    public int deleteApsScheduleTaskByIds(Long[] taskIds);
+    public int softDeleteApsScheduleTaskByIds(@Param("taskIds") Long[] taskIds,
+            @Param("operatorName") String operatorName);
+
+    public int softDeleteApsScheduleTasksByPlanId(@Param("planId") Long planId,
+            @Param("operatorName") String operatorName);
 }

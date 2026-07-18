@@ -117,7 +117,7 @@ public class ApsSchedulePlanController extends BaseController
     @DeleteMapping("/{planIds}")
     public AjaxResult remove(@PathVariable Long[] planIds)
     {
-        return toAjax(apsSchedulePlanService.deleteApsSchedulePlanByIds(planIds));
+        return toAjax(apsSchedulePlanService.deleteApsSchedulePlanByIds(planIds, getUsername()));
     }
 }
 

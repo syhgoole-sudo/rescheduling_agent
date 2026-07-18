@@ -260,7 +260,8 @@
             <el-descriptions-item label="冻结任务">{{ valueOrDash(strategyDetail.frozenTaskCount) }}</el-descriptions-item>
             <el-descriptions-item label="可调任务">{{ valueOrDash(strategyDetail.adjustableTaskCount) }}</el-descriptions-item>
             <el-descriptions-item label="插单任务">{{ valueOrDash(strategyDetail.insertTaskCount) }}</el-descriptions-item>
-            <el-descriptions-item label="算法">{{ algorithmType }}</el-descriptions-item>
+            <el-descriptions-item label="算法">{{ displayAlgorithmName }}</el-descriptions-item>
+            <el-descriptions-item v-if="displayRandomSeed !== null" label="randomSeed">{{ displayRandomSeed }}</el-descriptions-item>
           </el-descriptions>
 
           <div class="section-title">KPI 摘要</div>
@@ -268,6 +269,11 @@
             <el-table-column label="指标" prop="label" min-width="145" />
             <el-table-column label="值" prop="value" min-width="120" show-overflow-tooltip />
           </el-table>
+          <div class="evidence-actions">
+            <el-button size="mini" icon="el-icon-s-order" :disabled="!newPlanId" @click="openEvidence('orders')">查看受影响 Lot</el-button>
+            <el-button size="mini" icon="el-icon-s-operation" :disabled="!newPlanId" @click="openEvidence('tasks')">查看变更任务</el-button>
+            <el-button size="mini" icon="el-icon-document-checked" :disabled="!newPlanId" @click="openEvidence('decision')">查看决策证据</el-button>
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -285,6 +291,8 @@
       <el-button icon="el-icon-chat-dot-round" :loading="aiExplainLoading" :disabled="!insertEventId" @click="handleAiExplanationReport">AI 分析报告</el-button>
     </el-card>
 
+    <gantt-preview ref="ganttPreview" :source-plan-id="sourcePlanId" :new-plan-id="newPlanId" />
+
     <el-dialog title="KPI 对比" :visible.sync="kpiOpen" width="860px" append-to-body>
       <el-table :data="kpiRows" size="small" border>
         <el-table-column label="指标" prop="label" width="240" />
@@ -292,6 +300,78 @@
         <el-table-column label="值" prop="value" />
       </el-table>
       <el-input class="section-gap" type="textarea" :rows="12" :value="prettyJson(compareDetail)" readonly />
+    </el-dialog>
+
+    <el-dialog :title="evidenceTitle" :visible.sync="evidenceOpen" width="1120px" append-to-body>
+      <el-table
+        v-if="evidenceView === 'orders'"
+        :data="compareDetail && compareDetail.affectedOrderDetails ? compareDetail.affectedOrderDetails : []"
+        border
+        size="small"
+        max-height="500"
+        empty-text="没有实际受影响的 Lot"
+      >
+        <el-table-column label="Lot 编码" prop="orderCode" min-width="130" fixed="left" />
+        <el-table-column label="类型" prop="orderType" width="90" />
+        <el-table-column label="优先级" prop="priorityLevel" width="80" />
+        <el-table-column label="原完工时间" prop="originalFinishTime" min-width="160" />
+        <el-table-column label="新完工时间" prop="newFinishTime" min-width="160" />
+        <el-table-column label="真实延期" prop="trueDelayMinutes" width="95" />
+        <el-table-column label="计划后移" prop="stabilityDelayMinutes" width="95" />
+        <el-table-column label="变更任务" prop="changedTaskCount" width="90" />
+        <el-table-column label="影响类型" prop="impactType" width="105" fixed="right">
+          <template slot-scope="scope">
+            <el-tag size="mini" :type="impactTagType(scope.row.impactType)">{{ scope.row.impactType }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-table
+        v-if="evidenceView === 'tasks'"
+        :data="compareDetail && compareDetail.changedTaskDetails ? compareDetail.changedTaskDetails : []"
+        border
+        size="small"
+        max-height="500"
+        empty-text="没有任务发生变化"
+      >
+        <el-table-column label="Lot 编码" prop="orderCode" min-width="125" fixed="left" />
+        <el-table-column label="工序" min-width="115">
+          <template slot-scope="scope">{{ scope.row.processSeq }} / {{ scope.row.processCode }}</template>
+        </el-table-column>
+        <el-table-column label="原设备" prop="originalEquipmentCode" min-width="110" />
+        <el-table-column label="新设备" prop="equipmentCode" min-width="110" />
+        <el-table-column label="原开始" prop="originalStartTime" min-width="160" />
+        <el-table-column label="新开始" prop="newStartTime" min-width="160" />
+        <el-table-column label="位移分钟" prop="startShiftMinutes" width="95" />
+        <el-table-column label="变更类型" prop="changeType" min-width="185" fixed="right">
+          <template slot-scope="scope">
+            <el-tag size="mini" :type="changeTagType(scope.row.changeType)">{{ scope.row.changeType }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <template v-if="evidenceView === 'decision' && compareDetail && compareDetail.decisionEvidence">
+        <el-alert
+          :title="'辅助建议：' + compareDetail.decisionEvidence.recommendationLevel + '。' + compareDetail.decisionEvidence.recommendationReason"
+          :type="recommendationAlertType(compareDetail.decisionEvidence.recommendationLevel)"
+          :closable="false"
+          show-icon
+        />
+        <el-descriptions class="section-gap" :column="3" border size="small">
+          <el-descriptions-item label="插单按期">{{ compareDetail.decisionEvidence.insertOrderOnTime ? '是' : '否' }}</el-descriptions-item>
+          <el-descriptions-item label="插单真实延期">{{ compareDetail.decisionEvidence.insertOrderTrueDelayMinutes }} 分钟</el-descriptions-item>
+          <el-descriptions-item label="受影响 Lot">{{ compareDetail.decisionEvidence.affectedOrderCount }}</el-descriptions-item>
+          <el-descriptions-item label="后移 Lot">{{ compareDetail.decisionEvidence.delayedOrderCount }}</el-descriptions-item>
+          <el-descriptions-item label="提前 Lot">{{ compareDetail.decisionEvidence.advancedOrderCount }}</el-descriptions-item>
+          <el-descriptions-item label="变更任务">{{ compareDetail.decisionEvidence.changedTaskCount }}</el-descriptions-item>
+          <el-descriptions-item label="变更比例">{{ compareDetail.decisionEvidence.changedTaskRatio }}</el-descriptions-item>
+          <el-descriptions-item label="最大计划后移">{{ compareDetail.decisionEvidence.maxStabilityDelayMinutes }} 分钟</el-descriptions-item>
+          <el-descriptions-item label="总计划后移">{{ compareDetail.decisionEvidence.totalStabilityDelayMinutes }} 分钟</el-descriptions-item>
+          <el-descriptions-item label="受影响设备组">{{ compareDetail.decisionEvidence.affectedEquipmentGroupCount }}</el-descriptions-item>
+          <el-descriptions-item label="设备组" :span="2">{{ formatEquipmentGroups(compareDetail.decisionEvidence.affectedEquipmentGroups) }}</el-descriptions-item>
+        </el-descriptions>
+        <div class="evidence-note">该建议仅用于辅助调度员判断，不会自动采用或拒绝方案。</div>
+      </template>
     </el-dialog>
 
     <el-dialog title="解释报告" :visible.sync="explanationOpen" width="860px" append-to-body>
@@ -318,6 +398,7 @@ import { listRouteOperation } from "@/api/aps/routeOperation";
 import { listOrder } from "@/api/aps/order";
 import { listSchedulePlan, getSchedulePlan, generateInitialSchedule, compareSchedulePlan, confirmSchedulePlan, rejectSchedulePlan } from "@/api/aps/schedulePlan";
 import { getInsertEvent, createAndAnalyzeInsertEvent, recommendStrategy, generateLocalReschedule, generateExplanationReport, generateAiExplanationReport } from "@/api/aps/insertEvent";
+import GanttPreview from "./GanttPreview.vue";
 
 const STAGE = {
   EMPTY: "EMPTY",
@@ -333,6 +414,7 @@ const STAGE = {
 
 export default {
   name: "RescheduleWorkbench",
+  components: { GanttPreview },
   data() {
     return {
       productLoading: false,
@@ -357,11 +439,14 @@ export default {
       sourcePlan: null,
       insertEvent: null,
       strategyDetail: {},
+      rescheduleResult: {},
       newPlan: null,
       compareDetail: null,
       explanationDetail: null,
       aiExplanationDetail: null,
       kpiOpen: false,
+      evidenceOpen: false,
+      evidenceView: "orders",
       explanationOpen: false,
       aiExplanationOpen: false
     };
@@ -456,6 +541,17 @@ export default {
     displayStrategyType() {
       return this.strategyDetail.strategyType || (this.insertEvent ? this.insertEvent.strategyType : null);
     },
+    displayAlgorithmName() {
+      return this.rescheduleResult.algorithmType || this.rescheduleResult.algorithmName ||
+        (this.newPlan ? this.newPlan.algorithmName : null) || this.algorithmType;
+    },
+    displayRandomSeed() {
+      if (this.rescheduleResult.randomSeed !== undefined && this.rescheduleResult.randomSeed !== null) {
+        return this.rescheduleResult.randomSeed;
+      }
+      const planKpi = this.newPlan ? this.parseJson(this.newPlan.kpiJson) : null;
+      return planKpi && planKpi.randomSeed !== undefined ? planKpi.randomSeed : null;
+    },
     kpiRows() {
       const detail = this.compareDetail || {};
       const summary = detail.summary || {};
@@ -487,6 +583,10 @@ export default {
         label: item[1],
         value: this.valueOrDash(item[2])
       }));
+    },
+    evidenceTitle() {
+      const titles = { orders: "受影响 Lot", tasks: "变更任务", decision: "决策证据" };
+      return titles[this.evidenceView] || "方案差异";
     }
   },
   created() {
@@ -510,6 +610,7 @@ export default {
       this.sourcePlan = null;
       this.insertEvent = null;
       this.strategyDetail = {};
+      this.rescheduleResult = {};
       this.newPlan = null;
       this.compareDetail = null;
       if (!this.selectedProductId) {
@@ -550,6 +651,7 @@ export default {
     handleHotLotChange() {
       this.insertEvent = null;
       this.strategyDetail = {};
+      this.rescheduleResult = {};
       this.newPlan = null;
       this.compareDetail = null;
       if (this.selectedHotLotId) {
@@ -629,6 +731,7 @@ export default {
       this.rescheduleLoading = true;
       generateLocalReschedule(this.insertEvent.eventId, this.algorithmType, this.randomSeed).then(response => {
         const data = response.data || {};
+        this.rescheduleResult = data;
         this.$modal.msgSuccess("局部重调度候选方案已生成");
         return this.afterRescheduleGenerated(data);
       }).finally(() => {
@@ -709,6 +812,31 @@ export default {
         this.kpiOpen = true;
       });
     },
+    openEvidence(view) {
+      this.loadKpiCompare().then(() => {
+        this.evidenceView = view;
+        this.evidenceOpen = true;
+      });
+    },
+    impactTagType(type) {
+      const types = { INSERTED: "danger", DELAYED: "warning", ADVANCED: "success", CHANGED: "info" };
+      return types[type] || "info";
+    },
+    changeTagType(type) {
+      if (type === "INSERTED") return "danger";
+      if (type === "FROZEN") return "info";
+      if (type === "EQUIPMENT_CHANGED" || type === "TIME_AND_EQUIPMENT_CHANGED") return "warning";
+      return "";
+    },
+    recommendationAlertType(level) {
+      if (level === "RECOMMENDED") return "success";
+      if (level === "NOT_RECOMMENDED") return "error";
+      return "warning";
+    },
+    formatEquipmentGroups(groups) {
+      if (!groups || !groups.length) return "-";
+      return groups.map(item => item.equipmentGroupCode || item.equipmentGroupName || item.equipmentGroupId).join("、");
+    },
     handleExplanationReport() {
       this.explainLoading = true;
       generateExplanationReport(this.insertEventId).then(response => {
@@ -730,6 +858,9 @@ export default {
       });
     },
     handleRestart() {
+      if (this.$refs.ganttPreview) {
+        this.$refs.ganttPreview.resetPreview();
+      }
       this.selectedProductId = null;
       this.selectedHotLotId = null;
       this.sourcePlanId = null;
@@ -740,6 +871,7 @@ export default {
       this.sourcePlan = null;
       this.insertEvent = null;
       this.strategyDetail = {};
+      this.rescheduleResult = {};
       this.newPlan = null;
       this.compareDetail = null;
       this.explanationDetail = null;
@@ -896,6 +1028,23 @@ export default {
 
 .entry-tip {
   color: #909399;
+  font-size: 12px;
+}
+
+.evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.evidence-actions .el-button {
+  margin-left: 0;
+}
+
+.evidence-note {
+  margin-top: 12px;
+  color: #606266;
   font-size: 12px;
 }
 </style>

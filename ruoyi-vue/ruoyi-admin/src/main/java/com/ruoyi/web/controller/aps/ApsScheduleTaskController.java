@@ -103,7 +103,7 @@ public class ApsScheduleTaskController extends BaseController
     @DeleteMapping("/{taskIds}")
     public AjaxResult remove(@PathVariable Long[] taskIds)
     {
-        return toAjax(apsScheduleTaskService.deleteApsScheduleTaskByIds(taskIds));
+        return toAjax(apsScheduleTaskService.deleteApsScheduleTaskByIds(taskIds, getUsername()));
     }
 }
 

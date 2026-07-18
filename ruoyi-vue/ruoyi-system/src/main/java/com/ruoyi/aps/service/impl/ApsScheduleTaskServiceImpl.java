@@ -6,11 +6,14 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import com.ruoyi.aps.domain.ApsSchedulePlan;
 import com.ruoyi.aps.domain.ApsScheduleTask;
+import com.ruoyi.aps.mapper.ApsInsertEventMapper;
 import com.ruoyi.aps.mapper.ApsSchedulePlanMapper;
 import com.ruoyi.aps.mapper.ApsScheduleTaskMapper;
 import com.ruoyi.aps.service.IApsScheduleTaskService;
+import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 
 @Service
@@ -21,6 +24,9 @@ public class ApsScheduleTaskServiceImpl implements IApsScheduleTaskService
 
     @Autowired
     private ApsSchedulePlanMapper apsSchedulePlanMapper;
+
+    @Autowired
+    private ApsInsertEventMapper apsInsertEventMapper;
 
     @Override
     public ApsScheduleTask selectApsScheduleTaskById(Long taskId)
@@ -116,6 +122,7 @@ public class ApsScheduleTaskServiceImpl implements IApsScheduleTaskService
     @Override
     public int insertApsScheduleTask(ApsScheduleTask apsScheduleTask)
     {
+        apsScheduleTask.setDelFlag("0");
         return apsScheduleTaskMapper.insertApsScheduleTask(apsScheduleTask);
     }
 
@@ -126,15 +133,53 @@ public class ApsScheduleTaskServiceImpl implements IApsScheduleTaskService
     }
 
     @Override
-    public int deleteApsScheduleTaskByIds(Long[] taskIds)
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteApsScheduleTaskByIds(Long[] taskIds, String operatorName)
     {
-        return apsScheduleTaskMapper.deleteApsScheduleTaskByIds(taskIds);
+        if (taskIds == null || taskIds.length == 0)
+        {
+            throw new ServiceException("请选择要删除的调度任务");
+        }
+        for (Long taskId : taskIds)
+        {
+            validateTaskCanBeDeleted(taskId);
+        }
+        return apsScheduleTaskMapper.softDeleteApsScheduleTaskByIds(taskIds, operatorName);
     }
 
     @Override
-    public int deleteApsScheduleTaskById(Long taskId)
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteApsScheduleTaskById(Long taskId, String operatorName)
     {
-        return apsScheduleTaskMapper.deleteApsScheduleTaskById(taskId);
+        validateTaskCanBeDeleted(taskId);
+        return apsScheduleTaskMapper.softDeleteApsScheduleTaskById(taskId, operatorName);
+    }
+
+    private void validateTaskCanBeDeleted(Long taskId)
+    {
+        ApsScheduleTask task = apsScheduleTaskMapper.selectApsScheduleTaskById(taskId);
+        if (task == null)
+        {
+            throw new ServiceException("调度任务不存在或已删除");
+        }
+        ApsSchedulePlan plan = apsSchedulePlanMapper.selectApsSchedulePlanById(task.getPlanId());
+        if (plan == null)
+        {
+            throw new ServiceException("任务所属调度方案不存在或已删除");
+        }
+        String planStatus = plan.getPlanStatus();
+        if ("Y".equalsIgnoreCase(plan.getActiveFlag()) || "ACTIVE".equalsIgnoreCase(planStatus)
+                || "CONFIRMED".equalsIgnoreCase(planStatus) || "HISTORY".equalsIgnoreCase(planStatus))
+        {
+            throw new ServiceException("任务所属方案处于激活、确认或历史状态，禁止删除任务");
+        }
+        Long planId = plan.getPlanId();
+        if (plan.getEventId() != null || apsInsertEventMapper.countBySourcePlanId(planId) > 0
+                || apsInsertEventMapper.countByNewPlanId(planId) > 0
+                || apsSchedulePlanMapper.countReschedulePlansBySourcePlanId(planId) > 0)
+        {
+            throw new ServiceException("任务所属方案已进入插单重调度追溯链，禁止删除任务");
+        }
     }
 
     private Map<String, Object> toGanttTask(ApsScheduleTask task)

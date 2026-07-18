@@ -34,6 +34,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectApsSchedulePlanList" parameterType="com.ruoyi.aps.domain.ApsSchedulePlan" resultMap="ApsSchedulePlanResult">
         <include refid="selectApsSchedulePlanVo"/>
         <where>
+            and (del_flag = '0' or del_flag is null)
             <if test="planCode != null and planCode != ''"> and plan_code like concat('%', #{planCode}, '%')</if>
             <if test="planName != null and planName != ''"> and plan_name like concat('%', #{planName}, '%')</if>
             <if test="planType != null and planType != ''"> and plan_type like concat('%', #{planType}, '%')</if>
@@ -45,6 +46,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectApsSchedulePlanById" parameterType="Long" resultMap="ApsSchedulePlanResult">
         <include refid="selectApsSchedulePlanVo"/>
         where plan_id = #{planId}
+          and (del_flag = '0' or del_flag is null)
     </select>
 
     <select id="selectActiveInitialPlan" resultMap="ApsSchedulePlanResult">
@@ -114,24 +116,29 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="kpiJson != null">kpi_json = #{kpiJson},</if>
             <if test="aiExplanation != null">ai_explanation = #{aiExplanation},</if>
             <if test="activeFlag != null">active_flag = #{activeFlag},</if>
-            <if test="delFlag != null">del_flag = #{delFlag},</if>
             <if test="updateBy != null">update_by = #{updateBy},</if>
             <if test="remark != null">remark = #{remark},</if>
             update_time = sysdate()
         </trim>
         where plan_id = #{planId}
+          and (del_flag = '0' or del_flag is null)
     </update>
 
-    <delete id="deleteApsSchedulePlanById" parameterType="Long">
-        delete from aps_schedule_plan where plan_id = #{planId}
-    </delete>
+    <update id="softDeleteApsSchedulePlanById">
+        update aps_schedule_plan
+        set del_flag = '2',
+            update_by = #{operatorName},
+            update_time = sysdate()
+        where plan_id = #{planId}
+          and (del_flag = '0' or del_flag is null)
+    </update>
 
-    <delete id="deleteApsSchedulePlanByIds" parameterType="Long">
-        delete from aps_schedule_plan where plan_id in
-        <foreach item="planId" collection="array" open="(" separator="," close=")">
-            #{planId}
-        </foreach>
-    </delete>
+    <select id="countReschedulePlansBySourcePlanId" parameterType="Long" resultType="int">
+        select count(1)
+        from aps_schedule_plan
+        where source_plan_id = #{sourcePlanId}
+          and (del_flag = '0' or del_flag is null)
+    </select>
 
     <update id="archiveActiveInitialPlans">
         update aps_schedule_plan
@@ -140,5 +147,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             update_time = sysdate()
         where plan_type = 'INITIAL'
           and active_flag = 'Y'
+          and (del_flag = '0' or del_flag is null)
     </update>
 </mapper>

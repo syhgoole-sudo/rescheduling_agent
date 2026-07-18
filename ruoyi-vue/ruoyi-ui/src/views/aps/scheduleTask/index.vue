@@ -124,9 +124,6 @@
         <el-form-item label="变更" prop="isChanged">
           <el-input v-model="form.isChanged" placeholder="Y / N" />
         </el-form-item>
-        <el-form-item label="删除标识" prop="delFlag">
-          <el-input v-model="form.delFlag" placeholder="0 / 1" />
-        </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" placeholder="请输入内容" />
         </el-form-item>
@@ -270,7 +267,7 @@ export default {
     },
     handleDelete(row) {
       const taskIds = row.taskId || this.ids;
-      this.$modal.confirm('是否确认删除调度任务编号为"' + taskIds + '"的数据项？').then(function() {
+      this.$modal.confirm('删除后该任务将在业务列表中隐藏，但系统仍保留追溯记录。是否继续？任务编号：' + taskIds).then(function() {
         return delScheduleTask(taskIds);
       }).then(() => {
         this.getList();

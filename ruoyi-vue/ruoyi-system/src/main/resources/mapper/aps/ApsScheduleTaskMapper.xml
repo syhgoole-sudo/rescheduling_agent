@@ -43,6 +43,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectApsScheduleTaskList" parameterType="com.ruoyi.aps.domain.ApsScheduleTask" resultMap="ApsScheduleTaskResult">
         <include refid="selectApsScheduleTaskVo"/>
         <where>
+            and (del_flag = '0' or del_flag is null)
             <if test="planId != null"> and plan_id = #{planId}</if>
             <if test="orderId != null"> and order_id = #{orderId}</if>
             <if test="orderCode != null and orderCode != ''"> and order_code like concat('%', #{orderCode}, '%')</if>
@@ -55,6 +56,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectApsScheduleTaskById" parameterType="Long" resultMap="ApsScheduleTaskResult">
         <include refid="selectApsScheduleTaskVo"/>
         where task_id = #{taskId}
+          and (del_flag = '0' or del_flag is null)
     </select>
 
     <select id="selectApsScheduleTaskListByPlanId" parameterType="Long" resultMap="ApsScheduleTaskResult">
@@ -167,22 +169,41 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="originalStartTime != null">original_start_time = #{originalStartTime},</if>
             <if test="originalEndTime != null">original_end_time = #{originalEndTime},</if>
             <if test="originalEquipmentId != null">original_equipment_id = #{originalEquipmentId},</if>
-            <if test="delFlag != null">del_flag = #{delFlag},</if>
             <if test="updateBy != null">update_by = #{updateBy},</if>
             <if test="remark != null">remark = #{remark},</if>
             update_time = sysdate()
         </trim>
         where task_id = #{taskId}
+          and (del_flag = '0' or del_flag is null)
     </update>
 
-    <delete id="deleteApsScheduleTaskById" parameterType="Long">
-        delete from aps_schedule_task where task_id = #{taskId}
-    </delete>
+    <update id="softDeleteApsScheduleTaskById">
+        update aps_schedule_task
+        set del_flag = '2',
+            update_by = #{operatorName},
+            update_time = sysdate()
+        where task_id = #{taskId}
+          and (del_flag = '0' or del_flag is null)
+    </update>
 
-    <delete id="deleteApsScheduleTaskByIds" parameterType="Long">
-        delete from aps_schedule_task where task_id in
-        <foreach item="taskId" collection="array" open="(" separator="," close=")">
+    <update id="softDeleteApsScheduleTaskByIds">
+        update aps_schedule_task
+        set del_flag = '2',
+            update_by = #{operatorName},
+            update_time = sysdate()
+        where task_id in
+        <foreach item="taskId" collection="taskIds" open="(" separator="," close=")">
             #{taskId}
         </foreach>
-    </delete>
+          and (del_flag = '0' or del_flag is null)
+    </update>
+
+    <update id="softDeleteApsScheduleTasksByPlanId">
+        update aps_schedule_task
+        set del_flag = '2',
+            update_by = #{operatorName},
+            update_time = sysdate()
+        where plan_id = #{planId}
+          and (del_flag = '0' or del_flag is null)
+    </update>
 </mapper>

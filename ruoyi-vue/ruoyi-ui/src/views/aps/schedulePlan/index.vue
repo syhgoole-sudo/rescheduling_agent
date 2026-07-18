@@ -71,14 +71,14 @@
           <el-button v-if="canConfirmOrReject(scope.row)" size="mini" type="text" icon="el-icon-check" @click="handleConfirmPlan(scope.row)" v-hasPermi="['aps:schedulePlan:edit']">采用方案</el-button>
           <el-button v-if="canConfirmOrReject(scope.row)" size="mini" type="text" icon="el-icon-close" @click="handleRejectPlan(scope.row)" v-hasPermi="['aps:schedulePlan:edit']">拒绝方案</el-button>
           <el-button size="mini" type="text" icon="el-icon-edit" @click="handleUpdate(scope.row)" v-hasPermi="['aps:schedulePlan:edit']">修改</el-button>
-          <el-button size="mini" type="text" icon="el-icon-delete" @click="handleDelete(scope.row)" v-hasPermi="['aps:schedulePlan:remove']">删除</el-button>
+          <el-button v-if="canDeletePlan(scope.row)" size="mini" type="text" icon="el-icon-delete" @click="handleDelete(scope.row)" v-hasPermi="['aps:schedulePlan:remove']">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
     <pagination v-show="total>0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize" @pagination="getList" />
 
-    <el-dialog title="方案 KPI 对比" :visible.sync="compareOpen" width="860px" append-to-body>
+    <el-dialog title="新旧方案对比" :visible.sync="compareOpen" width="1180px" append-to-body>
       <template v-if="compareDetail">
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="原方案">{{ compareDetail.sourcePlanId }} / {{ compareDetail.sourcePlanCode }}</el-descriptions-item>
@@ -86,6 +86,8 @@
           <el-descriptions-item label="插单事件">{{ compareDetail.eventId }}</el-descriptions-item>
           <el-descriptions-item label="插单订单">{{ compareDetail.insertOrderCode }}</el-descriptions-item>
         </el-descriptions>
+        <el-tabs v-model="compareTab" class="mt12">
+          <el-tab-pane label="KPI 总览" name="kpi">
         <el-descriptions class="mt12" :column="3" border size="small" title="任务变化">
           <el-descriptions-item label="原任务数">{{ compareDetail.summary.originalTaskCount }}</el-descriptions-item>
           <el-descriptions-item label="新任务数">{{ compareDetail.summary.newTaskCount }}</el-descriptions-item>
@@ -131,6 +133,70 @@
           <el-descriptions-item label="插单真实延期分钟">{{ insertOrderCompare.insertOrderTrueDelayMinutes }}</el-descriptions-item>
           <el-descriptions-item label="结论">{{ compareDetail.conclusion }}</el-descriptions-item>
         </el-descriptions>
+          </el-tab-pane>
+
+          <el-tab-pane label="受影响 Lot" name="orders">
+            <el-table :data="compareDetail.affectedOrderDetails || []" border size="small" max-height="480" empty-text="没有实际受影响的 Lot">
+              <el-table-column label="Lot 编码" prop="orderCode" min-width="130" fixed="left" />
+              <el-table-column label="类型" prop="orderType" width="90" />
+              <el-table-column label="优先级" prop="priorityLevel" width="80" />
+              <el-table-column label="原完工时间" prop="originalFinishTime" min-width="160" />
+              <el-table-column label="新完工时间" prop="newFinishTime" min-width="160" />
+              <el-table-column label="真实延期" prop="trueDelayMinutes" width="95" />
+              <el-table-column label="计划后移" prop="stabilityDelayMinutes" width="95" />
+              <el-table-column label="变更任务" prop="changedTaskCount" width="90" />
+              <el-table-column label="影响类型" prop="impactType" width="105" fixed="right">
+                <template slot-scope="scope">
+                  <el-tag size="mini" :type="impactTagType(scope.row.impactType)">{{ scope.row.impactType }}</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+
+          <el-tab-pane label="变更任务" name="tasks">
+            <el-table :data="compareDetail.changedTaskDetails || []" border size="small" max-height="480" empty-text="没有任务发生变化">
+              <el-table-column label="Lot 编码" prop="orderCode" min-width="125" fixed="left" />
+              <el-table-column label="工序" min-width="115">
+                <template slot-scope="scope">{{ scope.row.processSeq }} / {{ scope.row.processCode }}</template>
+              </el-table-column>
+              <el-table-column label="原设备" prop="originalEquipmentCode" min-width="110" />
+              <el-table-column label="新设备" prop="equipmentCode" min-width="110" />
+              <el-table-column label="原开始" prop="originalStartTime" min-width="160" />
+              <el-table-column label="新开始" prop="newStartTime" min-width="160" />
+              <el-table-column label="位移分钟" prop="startShiftMinutes" width="95" />
+              <el-table-column label="变更类型" prop="changeType" min-width="185" fixed="right">
+                <template slot-scope="scope">
+                  <el-tag size="mini" :type="changeTagType(scope.row.changeType)">{{ scope.row.changeType }}</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+
+          <el-tab-pane label="决策证据" name="decision">
+            <template v-if="compareDetail.decisionEvidence">
+              <el-alert
+                :title="'辅助建议：' + compareDetail.decisionEvidence.recommendationLevel + '。' + compareDetail.decisionEvidence.recommendationReason"
+                :type="recommendationAlertType(compareDetail.decisionEvidence.recommendationLevel)"
+                :closable="false"
+                show-icon
+              />
+              <el-descriptions class="mt12" :column="3" border size="small">
+                <el-descriptions-item label="插单按期">{{ compareDetail.decisionEvidence.insertOrderOnTime ? '是' : '否' }}</el-descriptions-item>
+                <el-descriptions-item label="插单真实延期">{{ compareDetail.decisionEvidence.insertOrderTrueDelayMinutes }} 分钟</el-descriptions-item>
+                <el-descriptions-item label="受影响 Lot">{{ compareDetail.decisionEvidence.affectedOrderCount }}</el-descriptions-item>
+                <el-descriptions-item label="后移 Lot">{{ compareDetail.decisionEvidence.delayedOrderCount }}</el-descriptions-item>
+                <el-descriptions-item label="提前 Lot">{{ compareDetail.decisionEvidence.advancedOrderCount }}</el-descriptions-item>
+                <el-descriptions-item label="变更任务">{{ compareDetail.decisionEvidence.changedTaskCount }}</el-descriptions-item>
+                <el-descriptions-item label="变更比例">{{ compareDetail.decisionEvidence.changedTaskRatio }}</el-descriptions-item>
+                <el-descriptions-item label="最大计划后移">{{ compareDetail.decisionEvidence.maxStabilityDelayMinutes }} 分钟</el-descriptions-item>
+                <el-descriptions-item label="总计划后移">{{ compareDetail.decisionEvidence.totalStabilityDelayMinutes }} 分钟</el-descriptions-item>
+                <el-descriptions-item label="受影响设备组">{{ compareDetail.decisionEvidence.affectedEquipmentGroupCount }}</el-descriptions-item>
+                <el-descriptions-item label="设备组" :span="2">{{ formatEquipmentGroups(compareDetail.decisionEvidence.affectedEquipmentGroups) }}</el-descriptions-item>
+              </el-descriptions>
+              <div class="evidence-note">该建议仅用于辅助调度员判断，不会自动采用或拒绝方案。</div>
+            </template>
+          </el-tab-pane>
+        </el-tabs>
       </template>
     </el-dialog>
 
@@ -166,9 +232,6 @@
         <el-form-item label="有效标识" prop="activeFlag">
           <el-input v-model="form.activeFlag" placeholder="Y / N" />
         </el-form-item>
-        <el-form-item label="删除标识" prop="delFlag">
-          <el-input v-model="form.delFlag" placeholder="0 / 1" />
-        </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" placeholder="请输入内容" />
         </el-form-item>
@@ -190,6 +253,7 @@ export default {
     return {
       loading: true,
       ids: [],
+      selectedPlans: [],
       single: true,
       multiple: true,
       showSearch: true,
@@ -198,6 +262,7 @@ export default {
       title: "",
       open: false,
       compareOpen: false,
+      compareTab: "kpi",
       compareDetail: null,
       queryParams: {
         pageNum: 1,
@@ -293,8 +358,15 @@ export default {
     },
     handleSelectionChange(selection) {
       this.ids = selection.map(item => item.planId);
+      this.selectedPlans = selection;
       this.single = selection.length !== 1;
-      this.multiple = !selection.length;
+      this.multiple = !selection.length || selection.some(item => !this.canDeletePlan(item));
+    },
+    canDeletePlan(plan) {
+      const protectedStatuses = ["ACTIVE", "CONFIRMED", "HISTORY"];
+      return plan.activeFlag !== "Y"
+        && !protectedStatuses.includes((plan.planStatus || "").toUpperCase())
+        && !plan.eventId;
     },
     handleAdd() {
       this.reset();
@@ -328,8 +400,28 @@ export default {
     handleCompare(row) {
       compareSchedulePlan(row.planId).then(response => {
         this.compareDetail = response.data;
+        this.compareTab = "kpi";
         this.compareOpen = true;
       });
+    },
+    impactTagType(type) {
+      const types = { INSERTED: "danger", DELAYED: "warning", ADVANCED: "success", CHANGED: "info" };
+      return types[type] || "info";
+    },
+    changeTagType(type) {
+      if (type === "INSERTED") return "danger";
+      if (type === "FROZEN") return "info";
+      if (type === "EQUIPMENT_CHANGED" || type === "TIME_AND_EQUIPMENT_CHANGED") return "warning";
+      return "";
+    },
+    recommendationAlertType(level) {
+      if (level === "RECOMMENDED") return "success";
+      if (level === "NOT_RECOMMENDED") return "error";
+      return "warning";
+    },
+    formatEquipmentGroups(groups) {
+      if (!groups || !groups.length) return "-";
+      return groups.map(item => item.equipmentGroupCode || item.equipmentGroupName || item.equipmentGroupId).join("、");
     },
     handleGanttCompare(row) {
       this.$router.push({ path: "/aps/scheduleTask/ganttCompare", query: { planId: row.planId } });
@@ -374,7 +466,12 @@ export default {
     },
     handleDelete(row) {
       const planIds = row.planId || this.ids;
-      this.$modal.confirm('是否确认删除调度方案编号为"' + planIds + '"的数据项？').then(function() {
+      const plans = row.planId ? [row] : this.selectedPlans;
+      if (plans.some(item => !this.canDeletePlan(item))) {
+        this.$modal.msgWarning("激活、确认、历史或已关联插单事件的方案禁止删除");
+        return;
+      }
+      this.$modal.confirm('删除后该方案将在业务列表中隐藏，但系统仍保留追溯记录。是否继续？方案编号：' + planIds).then(function() {
         return delSchedulePlan(planIds);
       }).then(() => {
         this.getList();
@@ -393,5 +490,11 @@ export default {
 <style scoped>
 .mt12 {
   margin-top: 12px;
+}
+
+.evidence-note {
+  margin-top: 12px;
+  color: #606266;
+  font-size: 12px;
 }
 </style>

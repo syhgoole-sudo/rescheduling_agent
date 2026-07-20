@@ -148,12 +148,17 @@
 
     <el-dialog title="策略推荐结果" :visible.sync="strategyOpen" width="640px" append-to-body>
       <el-descriptions v-if="strategyDetail" :column="2" border size="small">
-        <el-descriptions-item label="策略类型">{{ strategyDetail.strategyType }}</el-descriptions-item>
+        <el-descriptions-item label="策略编码">{{ strategyDetail.strategyCode || strategyDetail.strategyType }}</el-descriptions-item>
         <el-descriptions-item label="策略名称">{{ strategyDetail.strategyName }}</el-descriptions-item>
+        <el-descriptions-item label="影响任务比例">{{ formatStrategyRate(strategyDetail.impactFeatures, 'taskRate') }}</el-descriptions-item>
+        <el-descriptions-item label="影响 Lot 比例">{{ formatStrategyRate(strategyDetail.impactFeatures, 'lotRate') }}</el-descriptions-item>
+        <el-descriptions-item label="影响 Tool 比例">{{ formatStrategyRate(strategyDetail.impactFeatures, 'equipmentImpactRate') }}</el-descriptions-item>
+        <el-descriptions-item label="交期紧迫度">{{ strategyDetail.impactFeatures ? strategyDetail.impactFeatures.criticalRatio : '-' }}</el-descriptions-item>
         <el-descriptions-item label="冻结任务数">{{ strategyDetail.frozenTaskCount }}</el-descriptions-item>
         <el-descriptions-item label="可调整任务数">{{ strategyDetail.adjustableTaskCount }}</el-descriptions-item>
         <el-descriptions-item label="插单任务数">{{ strategyDetail.insertTaskCount }}</el-descriptions-item>
-        <el-descriptions-item label="推荐原因" :span="2">{{ strategyDetail.recommendedReason }}</el-descriptions-item>
+        <el-descriptions-item label="推荐原因" :span="2">{{ strategyDetail.strategyReason || strategyDetail.recommendedReason }}</el-descriptions-item>
+        <el-descriptions-item label="备选策略" :span="2">{{ formatAlternativeStrategies(strategyDetail.alternativeStrategies) }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
 
@@ -547,6 +552,20 @@ export default {
         return "";
       }
       return JSON.stringify(kpi);
+    },
+    formatStrategyRate(features, key) {
+      if (!features || features[key] === null || features[key] === undefined) return "-";
+      return (Number(features[key]) * 100).toFixed(1) + "%";
+    },
+    formatAlternativeStrategies(strategies) {
+      if (!strategies || !strategies.length) return "-";
+      const labels = {
+        LOCAL_RESCHEDULE: "局部重调度",
+        GLOBAL_RESCHEDULE: "全局重调度",
+        INSERT_PRIORITY: "插单优先策略",
+        MIN_CHANGE: "最小变更策略"
+      };
+      return strategies.map(item => labels[item] || item).join("、");
     },
     handleUpdate(row) {
       this.reset();

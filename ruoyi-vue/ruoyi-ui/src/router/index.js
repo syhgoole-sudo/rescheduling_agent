@@ -107,9 +107,9 @@ export const constantRoutes = [
     children: [
       {
         path: 'index',
-        component: () => import('@/views/index'),
+        component: () => import('@/views/aps/dashboard/index'),
         name: 'Index',
-        meta: { title: '首页', icon: 'dashboard', affix: true }
+        meta: { title: '生产调度驾驶舱', icon: 'dashboard', affix: true, activeMenu: '/aps/dashboard' }
       }
     ]
   },

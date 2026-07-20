@@ -247,7 +247,7 @@
             <el-timeline-item timestamp="2" :type="selectedHotLot ? 'success' : 'info'">选择 INSERT 订单作为插单 Hot Lot。</el-timeline-item>
             <el-timeline-item timestamp="3" :type="sourcePlan ? 'success' : 'info'">生成或选择当前 ACTIVE 初始方案。</el-timeline-item>
             <el-timeline-item timestamp="4" :type="insertEvent ? 'success' : 'info'">创建插单事件并完成影响分析。</el-timeline-item>
-            <el-timeline-item timestamp="5" :type="strategyDetail ? 'success' : 'info'">推荐局部重调度策略。</el-timeline-item>
+            <el-timeline-item timestamp="5" :type="strategyDetail ? 'success' : 'info'">根据扰动特征推荐重调度策略。</el-timeline-item>
             <el-timeline-item timestamp="6" :type="newPlan ? 'success' : 'info'">生成 PENDING 重调度候选方案。</el-timeline-item>
           </el-timeline>
         </el-card>
@@ -280,16 +280,75 @@
             <el-descriptions-item label="新方案ID">{{ insertEvent ? valueOrDash(insertEvent.newPlanId) : '-' }}</el-descriptions-item>
           </el-descriptions>
 
-          <div class="section-title">策略结果</div>
+          <div class="section-title">策略推荐分析</div>
+          <el-alert
+            title="策略推荐用于辅助决策，最终策略可由调度员调整，方案仍需人工确认。"
+            type="info"
+            :closable="false"
+            show-icon
+            class="strategy-notice"
+          />
           <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="策略名称">{{ strategyDetail.strategyName || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="策略类型">{{ displayStrategyType || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="插单影响等级">{{ impactLevelLabel(displayImpact.impactLevel) }}</el-descriptions-item>
+            <el-descriptions-item label="影响任务比例">{{ formatPercent(strategyFeatures.taskRate) }}</el-descriptions-item>
+            <el-descriptions-item label="影响 Lot 比例">{{ formatPercent(strategyFeatures.lotRate) }}</el-descriptions-item>
+            <el-descriptions-item label="影响 Tool 比例">{{ formatPercent(strategyFeatures.equipmentImpactRate) }}</el-descriptions-item>
+            <el-descriptions-item label="交期紧迫度">{{ valueOrDash(strategyFeatures.criticalRatio) }}</el-descriptions-item>
+            <el-descriptions-item label="Hot Lot 优先级">{{ valueOrDash(strategyFeatures.insertPriority) }}</el-descriptions-item>
+            <el-descriptions-item label="推荐策略" :span="2">
+              <el-tag v-if="displayStrategyType" type="warning" effect="plain">
+                {{ strategyDetail.strategyName || strategyLabel(displayStrategyType) }} / {{ displayStrategyType }}
+              </el-tag>
+              <span v-else>-</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="推荐原因" :span="2">{{ strategyDetail.strategyReason || strategyDetail.recommendedReason || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="备选策略" :span="2">
+              <template v-if="strategyDetail.alternativeStrategies && strategyDetail.alternativeStrategies.length">
+                <el-tag
+                  v-for="item in strategyDetail.alternativeStrategies"
+                  :key="item"
+                  size="mini"
+                  type="info"
+                  class="alternative-tag"
+                >{{ strategyLabel(item) }}</el-tag>
+              </template>
+              <span v-else>-</span>
+            </el-descriptions-item>
             <el-descriptions-item label="冻结任务">{{ valueOrDash(strategyDetail.frozenTaskCount) }}</el-descriptions-item>
             <el-descriptions-item label="可调任务">{{ valueOrDash(strategyDetail.adjustableTaskCount) }}</el-descriptions-item>
             <el-descriptions-item label="插单任务">{{ valueOrDash(strategyDetail.insertTaskCount) }}</el-descriptions-item>
             <el-descriptions-item label="算法">{{ displayAlgorithmName }}</el-descriptions-item>
             <el-descriptions-item v-if="displayRandomSeed !== null" label="randomSeed">{{ displayRandomSeed }}</el-descriptions-item>
           </el-descriptions>
+          <el-form v-if="insertEvent" label-position="top" size="small" class="strategy-control">
+            <el-form-item label="稳定性要求">
+              <el-switch
+                v-model="stabilityRequired"
+                active-text="稳定性优先"
+                inactive-text="常规"
+                :disabled="!!newPlanId || isTerminalStage"
+              />
+            </el-form-item>
+            <el-form-item label="人工选择策略">
+              <div class="strategy-select-row">
+                <el-select v-model="selectedStrategyCode" :disabled="!!newPlanId || isTerminalStage" style="flex: 1">
+                  <el-option
+                    v-for="item in strategyOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+                <el-button
+                  type="primary"
+                  plain
+                  :loading="strategyLoading"
+                  :disabled="!selectedStrategyCode || !!newPlanId || isTerminalStage"
+                  @click="handleApplyStrategy"
+                >应用选择</el-button>
+              </div>
+            </el-form-item>
+          </el-form>
 
           <div class="section-title">KPI 摘要</div>
           <el-table :data="kpiRows" size="mini" border height="260" empty-text="生成候选方案后展示 KPI">
@@ -462,6 +521,14 @@ export default {
       sourcePlanId: null,
       algorithmType: "RULE",
       randomSeed: 42,
+      stabilityRequired: false,
+      selectedStrategyCode: null,
+      strategyOptions: [
+        { value: "LOCAL_RESCHEDULE", label: "局部重调度" },
+        { value: "GLOBAL_RESCHEDULE", label: "全局重调度" },
+        { value: "INSERT_PRIORITY", label: "插单优先策略" },
+        { value: "MIN_CHANGE", label: "最小变更策略" }
+      ],
       workbenchStage: STAGE.EMPTY,
       sourcePlan: null,
       insertEvent: null,
@@ -568,7 +635,10 @@ export default {
       return this.parseJson(this.insertEvent.impactJson) || {};
     },
     displayStrategyType() {
-      return this.strategyDetail.strategyType || (this.insertEvent ? this.insertEvent.strategyType : null);
+      return this.strategyDetail.strategyCode || this.strategyDetail.strategyType || (this.insertEvent ? this.insertEvent.strategyType : null);
+    },
+    strategyFeatures() {
+      return this.strategyDetail.impactFeatures || {};
     },
     displayAlgorithmName() {
       return this.rescheduleResult.algorithmType || this.rescheduleResult.algorithmName ||
@@ -677,6 +747,8 @@ export default {
       this.sourcePlan = null;
       this.insertEvent = null;
       this.strategyDetail = {};
+      this.stabilityRequired = false;
+      this.selectedStrategyCode = null;
       this.rescheduleResult = {};
       this.newPlan = null;
       this.compareDetail = null;
@@ -718,6 +790,8 @@ export default {
     handleHotLotChange() {
       this.insertEvent = null;
       this.strategyDetail = {};
+      this.stabilityRequired = false;
+      this.selectedStrategyCode = null;
       this.rescheduleResult = {};
       this.newPlan = null;
       this.compareDetail = null;
@@ -784,12 +858,31 @@ export default {
     },
     handleRecommendStrategy() {
       this.strategyLoading = true;
-      recommendStrategy(this.insertEvent.eventId).then(response => {
+      recommendStrategy(this.insertEvent.eventId, {
+        stabilityRequired: this.stabilityRequired
+      }).then(response => {
         this.strategyDetail = response.data || {};
+        this.selectedStrategyCode = this.strategyDetail.strategyCode || this.strategyDetail.strategyType || null;
         return this.refreshInsertEvent();
       }).then(() => {
         this.workbenchStage = STAGE.STRATEGY_RECOMMENDED;
         this.$modal.msgSuccess("策略推荐完成");
+      }).finally(() => {
+        this.strategyLoading = false;
+      });
+    },
+    handleApplyStrategy() {
+      this.strategyLoading = true;
+      recommendStrategy(this.insertEvent.eventId, {
+        strategyCode: this.selectedStrategyCode,
+        stabilityRequired: this.stabilityRequired
+      }).then(response => {
+        this.strategyDetail = response.data || {};
+        this.selectedStrategyCode = this.strategyDetail.strategyCode || this.strategyDetail.strategyType;
+        return this.refreshInsertEvent();
+      }).then(() => {
+        this.workbenchStage = STAGE.STRATEGY_RECOMMENDED;
+        this.$modal.msgSuccess("人工选择的策略已应用");
       }).finally(() => {
         this.strategyLoading = false;
       });
@@ -933,6 +1026,8 @@ export default {
       this.sourcePlanId = null;
       this.algorithmType = "RULE";
       this.randomSeed = 42;
+      this.stabilityRequired = false;
+      this.selectedStrategyCode = null;
       this.routeOperationList = [];
       this.hotLotList = [];
       this.sourcePlan = null;
@@ -982,6 +1077,17 @@ export default {
     },
     valueOrDash(value) {
       return value === null || value === undefined || value === "" ? "-" : value;
+    },
+    formatPercent(value) {
+      return value === null || value === undefined || value === "" ? "-" : (Number(value) * 100).toFixed(1) + "%";
+    },
+    impactLevelLabel(level) {
+      const labels = { LOW: "低", MEDIUM: "中", HIGH: "高" };
+      return labels[level] || level || "-";
+    },
+    strategyLabel(code) {
+      const item = this.strategyOptions.find(option => option.value === code);
+      return item ? item.label : code || "-";
     },
     pickCompareSummary(value) {
       if (!value) {
@@ -1079,6 +1185,24 @@ export default {
   margin: 16px 0 8px;
   font-weight: 600;
   color: #303133;
+}
+
+.strategy-notice,
+.strategy-control {
+  margin-bottom: 10px;
+}
+
+.strategy-control {
+  margin-top: 12px;
+}
+
+.strategy-select-row {
+  display: flex;
+  gap: 8px;
+}
+
+.alternative-tag {
+  margin: 2px 6px 2px 0;
 }
 
 .section-gap {

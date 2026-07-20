@@ -129,7 +129,7 @@ def local_reschedule_by_rule(request: LocalRescheduleRequest) -> Tuple[List[Task
     for task in request.frozenTasks:
         start = _parse_task_time(task.plannedStartTime)
         end = _parse_task_time(task.plannedEndTime)
-        task_schedules.append(task.copy(update={
+        task_schedules.append(task.model_copy(update={
             "isFrozen": "Y",
             "isInserted": "N",
             "isChanged": "N",

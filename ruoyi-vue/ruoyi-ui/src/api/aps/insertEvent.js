@@ -30,10 +30,11 @@ export function createAndAnalyzeInsertEvent(insertOrderId) {
   })
 }
 
-export function recommendStrategy(eventId) {
+export function recommendStrategy(eventId, data) {
   return request({
     url: '/aps/insertEvent/recommendStrategy/' + eventId,
-    method: 'post'
+    method: 'post',
+    data: data || {}
   })
 }
 

@@ -27,6 +27,9 @@ public interface IApsInsertEventService
 
     public Map<String, Object> recommendStrategy(Long eventId, String operatorName);
 
+    public Map<String, Object> recommendStrategy(Long eventId, String operatorName,
+            String selectedStrategyCode, Boolean stabilityRequired);
+
     public Map<String, Object> generateLocalReschedule(Long eventId, String operatorName);
 
     public Map<String, Object> generateLocalReschedule(Long eventId, String operatorName, String algorithmType);

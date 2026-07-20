@@ -184,3 +184,10 @@ npm run dev
 ## 10. AI / Agent 边界
 
 本项目中的解释模块不直接生成任务时间、不分配设备、不改变调度结果。排产结果必须由规则算法或优化算法计算。AI / Agent 的合理定位是解释影响范围、策略选择、KPI 差异和方案取舍，辅助调度员决策。
+
+## 11. 算法对比实验
+
+项目已提供 FIFO、EDD、SPT、RULE 和 GA 的可复现实验框架，支持多订单规模、多随机实例、统一可行性校验、统计汇总、相对改进率、箱线图、规模变化图和 GA 收敛曲线。
+
+- 实验代码与运行方式：`aps-algorithm-service/experiments/README.md`
+- 正式实验报告：`docs/aps_algorithm_benchmark_report.md`

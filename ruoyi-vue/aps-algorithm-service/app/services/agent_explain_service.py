@@ -75,6 +75,7 @@ def _build_prompt(request: AgentExplainRequest) -> str:
         "输出字段必须包括：eventSummary, impactAnalysis, strategyExplanation, "
         "kpiInterpretation, riskWarning, recommendation, fullReport。\n"
         "要求：专业、简洁、基于数据，不夸大；必须同时说明收益和代价；"
+        "strategyExplanation 必须引用 strategyRecommendation 中的扰动特征和 strategyReason，说明为什么推荐当前策略；"
         "如果插单按期完成要说明；如果延期订单数、总延期或 makespan 增加，也必须说明；"
         "结合半导体可重入语境解释 lot、step、tool group、PHOTO 重入、hot lot。\n"
         "结构化数据：\n"
@@ -95,9 +96,11 @@ def _build_fallback_report(request: AgentExplainRequest) -> AgentExplainResponse
     event = request.event or {}
     insert_order = request.insertOrder or {}
     impact = request.impact or {}
+    strategy = impact.get("strategyRecommendation") or impact.get("strategy") or {}
+    features = strategy.get("impactFeatures") or impact.get("impactFeatures") or {}
     kpi = request.kpiCompare or {}
     summary = kpi.get("summary") or {}
-    delay = kpi.get("delayCompare") or {}
+    delay = kpi.get("trueDelayCompare") or kpi.get("delayCompare") or {}
     makespan = kpi.get("makespanCompare") or {}
     insert_compare = kpi.get("insertOrderCompare") or {}
 
@@ -111,17 +114,31 @@ def _build_fallback_report(request: AgentExplainRequest) -> AgentExplainResponse
         f"{impact.get('affectedTaskCount', 0)} 个，受影响 lot {impact.get('affectedOrderCount', 0)} 个，"
         f"受影响 tool {impact.get('affectedEquipmentCount', 0)} 台。"
     )
+    strategy_code = strategy.get("strategyCode") or strategy.get("strategyType") or request.strategyType
+    strategy_name = strategy.get("strategyName") or strategy_code
+    strategy_reason = strategy.get("strategyReason") or strategy.get("recommendedReason") or "未保存详细规则命中原因"
+    scope_text = {
+        "GLOBAL_RESCHEDULE": "源方案全部未完成 lot-step 进入可调整集合，以覆盖大范围 Tool 冲突",
+        "INSERT_PRIORITY": "Hot Lot steps 以真实交期保障为首要目标，其他任务按影响范围受控调整",
+        "MIN_CHANGE": "未受影响任务保持冻结，仅开放必要 lot-step 调整，以降低计划稳定性扰动",
+        "LOCAL_RESCHEDULE": "仅调整受影响 lot-step 和 Hot Lot steps，未受影响任务保持冻结",
+    }.get(strategy_code, "按已识别影响范围调整相关 lot-step")
     strategy_explanation = (
-        f"当前策略为 {request.strategyType}。该策略冻结未受影响任务，仅对受影响 lot-step 和 hot lot steps "
-        "进行局部重调度，符合半导体可重入场景下减少计划扰动的目标。"
+        f"系统推荐 {strategy_name}（{strategy_code}）。推荐依据：{strategy_reason}"
+        f"扰动特征为影响任务比例 {_format_rate(features.get('taskRate'))}、"
+        f"影响 Lot 比例 {_format_rate(features.get('lotRate'))}、"
+        f"影响 Tool 比例 {_format_rate(features.get('equipmentImpactRate'))}、"
+        f"交期紧迫度 {_format_number(features.get('criticalRatio'))}。执行范围：{scope_text}。"
+        "该推荐只用于辅助调度员决策，不替代人工确认。"
     )
     kpi_interpretation = (
         f"新方案任务数 {summary.get('newTaskCount', 0)}，变更任务数 {summary.get('changedTaskCount', 0)}，"
         f"插单任务数 {summary.get('insertedTaskCount', 0)}，冻结任务数 {summary.get('frozenTaskCount', 0)}。"
-        f"延期订单数变化 {delay.get('delayOrderCountDiff', 0)}，总延期分钟变化 "
-        f"{delay.get('totalDelayMinutesDiff', 0)}，makespan 变化 {makespan.get('makespanDiffMinutes', 0)} 分钟。"
+        f"真实延期 Lot 数变化 {delay.get('trueDelayOrderCountDiff', delay.get('delayOrderCountDiff', 0))}，"
+        f"真实总延期分钟变化 {delay.get('trueTotalDelayMinutesDiff', delay.get('totalDelayMinutesDiff', 0))}，"
+        f"makespan 变化 {makespan.get('makespanDiffMinutes', 0)} 分钟。"
     )
-    insert_delay = int(insert_compare.get("insertOrderDelayMinutes") or 0)
+    insert_delay = int(insert_compare.get("insertOrderTrueDelayMinutes") or insert_compare.get("insertOrderDelayMinutes") or 0)
     risk_warning = "插单 lot 可按期完成。" if insert_delay == 0 else f"插单 lot 仍延期 {insert_delay} 分钟，需要调度员关注。"
     if float(summary.get("changedTaskRatio") or 0) > 0.5:
         risk_warning += " 同时，新方案变更任务比例较高，说明计划扰动较大。"
@@ -145,3 +162,17 @@ def _build_fallback_report(request: AgentExplainRequest) -> AgentExplainResponse
         modelName="fallback-template",
         fallbackUsed=True,
     )
+
+
+def _format_rate(value: Any) -> str:
+    try:
+        return f"{float(value) * 100:.1f}%"
+    except (TypeError, ValueError):
+        return "未知"
+
+
+def _format_number(value: Any) -> str:
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return "未知"

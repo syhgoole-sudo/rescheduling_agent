@@ -81,9 +81,15 @@ public class ApsInsertEventController extends BaseController
     @PreAuthorize("@ss.hasPermi('aps:insertEvent:add')")
     @Log(title = "插单策略推荐", businessType = BusinessType.UPDATE)
     @PostMapping("/recommendStrategy/{eventId}")
-    public AjaxResult recommendStrategy(@PathVariable("eventId") Long eventId)
+    public AjaxResult recommendStrategy(@PathVariable("eventId") Long eventId,
+            @RequestBody(required = false) Map<String, Object> body)
     {
-        Map<String, Object> result = apsInsertEventService.recommendStrategy(eventId, getUsername());
+        String strategyCode = body == null || body.get("strategyCode") == null
+                ? null : body.get("strategyCode").toString();
+        Boolean stabilityRequired = body == null || body.get("stabilityRequired") == null
+                ? Boolean.FALSE : Boolean.valueOf(body.get("stabilityRequired").toString());
+        Map<String, Object> result = apsInsertEventService.recommendStrategy(
+                eventId, getUsername(), strategyCode, stabilityRequired);
         return AjaxResult.success(result);
     }
 

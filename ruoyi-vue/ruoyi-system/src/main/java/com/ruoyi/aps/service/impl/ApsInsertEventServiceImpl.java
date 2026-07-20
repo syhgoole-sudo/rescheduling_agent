@@ -24,12 +24,14 @@ import com.ruoyi.aps.client.dto.OrderDTO;
 import com.ruoyi.aps.client.dto.RouteOperationDTO;
 import com.ruoyi.aps.client.dto.ScheduleTaskDTO;
 import com.ruoyi.aps.domain.ApsEquipment;
+import com.ruoyi.aps.domain.ApsEquipmentGroup;
 import com.ruoyi.aps.domain.ApsInsertEvent;
 import com.ruoyi.aps.domain.ApsOrder;
 import com.ruoyi.aps.domain.ApsRouteOperation;
 import com.ruoyi.aps.domain.ApsSchedulePlan;
 import com.ruoyi.aps.domain.ApsScheduleTask;
 import com.ruoyi.aps.mapper.ApsEquipmentMapper;
+import com.ruoyi.aps.mapper.ApsEquipmentGroupMapper;
 import com.ruoyi.aps.mapper.ApsInsertEventMapper;
 import com.ruoyi.aps.mapper.ApsOrderMapper;
 import com.ruoyi.aps.mapper.ApsRouteOperationMapper;
@@ -37,6 +39,8 @@ import com.ruoyi.aps.mapper.ApsSchedulePlanMapper;
 import com.ruoyi.aps.mapper.ApsScheduleTaskMapper;
 import com.ruoyi.aps.service.IApsInsertEventService;
 import com.ruoyi.aps.service.IApsSchedulePlanService;
+import com.ruoyi.aps.strategy.StrategySelector;
+import com.ruoyi.aps.strategy.StrategySelector.ImpactFeatures;
 import com.ruoyi.common.utils.DateUtils;
 
 @Service
@@ -59,6 +63,12 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
 
     @Autowired
     private ApsEquipmentMapper apsEquipmentMapper;
+
+    @Autowired
+    private ApsEquipmentGroupMapper apsEquipmentGroupMapper;
+
+    @Autowired
+    private StrategySelector strategySelector;
 
     @Autowired
     private PythonScheduleClient pythonScheduleClient;
@@ -165,7 +175,7 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         event.setEventTime(new Date());
         event.setEventStatus("ANALYZED");
         event.setImpactJson(JSON.toJSONString(impact));
-        event.setStrategyType("LOCAL_RESCHEDULE_INSERT_ORDER");
+        event.setStrategyType(null);
         event.setEventReason("插单影响分析");
         event.setDelFlag("0");
         event.setCreateBy(operatorName);
@@ -194,6 +204,14 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> recommendStrategy(Long eventId, String operatorName)
     {
+        return recommendStrategy(eventId, operatorName, null, Boolean.FALSE);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> recommendStrategy(Long eventId, String operatorName,
+            String selectedStrategyCode, Boolean stabilityRequired)
+    {
         ApsInsertEvent event = apsInsertEventMapper.selectApsInsertEventById(eventId);
         if (event == null)
         {
@@ -213,38 +231,47 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         }
 
         JSONObject impact = JSON.parseObject(event.getImpactJson());
-        String impactLevel = impact.getString("impactLevel");
         Set<Long> affectedTaskIds = parseLongSet(impact.get("affectedTaskIds"));
 
         List<ApsScheduleTask> planTasks = apsScheduleTaskMapper.selectApsScheduleTaskListByPlanId(event.getSourcePlanId());
-        long adjustableTaskCount = planTasks.stream()
-                .filter(task -> affectedTaskIds.contains(task.getTaskId()))
-                .count();
-        long frozenTaskCount = planTasks.stream()
-                .filter(task -> !affectedTaskIds.contains(task.getTaskId()))
-                .count();
-
         ApsOrder insertOrder = apsOrderMapper.selectApsOrderById(event.getInsertOrderId());
         if (insertOrder == null)
         {
             throw new IllegalStateException("Insert order does not exist.");
         }
-        List<Map<String, Object>> insertTasks = buildInsertTasks(insertOrder);
-
-        Map<String, Object> strategy = buildStrategy(impactLevel, frozenTaskCount,
-                adjustableTaskCount, insertTasks.size());
+        List<ApsRouteOperation> insertRoute = selectRouteOperations(insertOrder.getProductId());
+        List<Map<String, Object>> insertTasks = buildInsertTasks(insertOrder, insertRoute);
+        ImpactFeatures features = buildImpactFeatures(event, insertOrder, impact, planTasks,
+                insertRoute, Boolean.TRUE.equals(stabilityRequired));
+        Map<String, Object> strategy = strategySelector.select(features, selectedStrategyCode).toMap();
+        boolean globalScope = StrategySelector.GLOBAL_RESCHEDULE.equals(strategy.get("strategyCode"));
+        long adjustableTaskCount = globalScope ? planTasks.size() : planTasks.stream()
+                .filter(task -> affectedTaskIds.contains(task.getTaskId()))
+                .count();
+        long frozenTaskCount = globalScope ? 0L : planTasks.size() - adjustableTaskCount;
+        strategy.put("frozenTaskCount", frozenTaskCount);
+        strategy.put("adjustableTaskCount", adjustableTaskCount);
+        strategy.put("insertTaskCount", insertTasks.size());
         impact.put("strategy", strategy);
+        impact.put("strategyRecommendation", strategy);
+        impact.put("strategyJson", strategy);
+        impact.put("impactFeatures", strategy.get("impactFeatures"));
 
-        event.setStrategyType((String) strategy.get("strategyType"));
+        event.setStrategyType((String) strategy.get("strategyCode"));
         event.setImpactJson(JSON.toJSONString(impact));
-        event.setRemark((String) strategy.get("recommendedReason"));
+        event.setRemark((String) strategy.get("strategyReason"));
         event.setUpdateBy(operatorName);
         apsInsertEventMapper.updateApsInsertEvent(event);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("eventId", event.getEventId());
+        result.put("strategyCode", strategy.get("strategyCode"));
         result.put("strategyType", strategy.get("strategyType"));
         result.put("strategyName", strategy.get("strategyName"));
+        result.put("strategyReason", strategy.get("strategyReason"));
+        result.put("impactFeatures", strategy.get("impactFeatures"));
+        result.put("alternativeStrategies", strategy.get("alternativeStrategies"));
+        result.put("strategyJson", strategy);
         result.put("frozenTaskCount", frozenTaskCount);
         result.put("adjustableTaskCount", adjustableTaskCount);
         result.put("insertTaskCount", insertTasks.size());
@@ -289,7 +316,11 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         }
 
         JSONObject impact = JSON.parseObject(event.getImpactJson());
-        JSONObject strategy = impact.getJSONObject("strategy");
+        JSONObject strategy = impact.getJSONObject("strategyRecommendation");
+        if (strategy == null)
+        {
+            strategy = impact.getJSONObject("strategy");
+        }
         if (strategy == null)
         {
             throw new IllegalStateException("Please recommend strategy before generating local reschedule plan.");
@@ -314,9 +345,11 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         List<ApsScheduleTask> sourceTasks = apsScheduleTaskMapper.selectApsScheduleTaskListByPlanId(sourcePlan.getPlanId());
         List<ScheduleTaskDTO> frozenTasks = new ArrayList<>();
         List<ScheduleTaskDTO> adjustableTasks = new ArrayList<>();
+        boolean globalScope = StrategySelector.GLOBAL_RESCHEDULE.equals(strategy.getString("strategyCode"))
+                || StrategySelector.GLOBAL_RESCHEDULE.equals(strategy.getString("strategyType"));
         for (ApsScheduleTask task : sourceTasks)
         {
-            if (affectedTaskIds.contains(task.getTaskId()))
+            if (globalScope || affectedTaskIds.contains(task.getTaskId()))
             {
                 adjustableTasks.add(toScheduleTaskDTO(task, false));
             }
@@ -403,6 +436,8 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         ApsSchedulePlan sourcePlan = event.getSourcePlanId() == null ? null : apsSchedulePlanMapper.selectApsSchedulePlanById(event.getSourcePlanId());
         if (event.getNewPlanId() == null)
         {
+            JSONObject impact = event.getImpactJson() == null || event.getImpactJson().trim().isEmpty()
+                    ? new JSONObject() : JSON.parseObject(event.getImpactJson());
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("eventId", event.getEventId());
             result.put("eventCode", event.getEventCode());
@@ -411,7 +446,7 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
             result.put("reportTitle", "插单重调度解释报告");
             result.put("eventSummary", buildEventSummary(insertOrder, event));
             result.put("impactSummary", "尚未生成重调度方案，无法生成完整解释报告。");
-            result.put("strategySummary", event.getStrategyType() == null ? "尚未形成策略建议。" : "当前策略类型为 " + event.getStrategyType() + "。");
+            result.put("strategySummary", buildStrategySummary(event, impact));
             result.put("rescheduleSummary", "尚未生成重调度方案。");
             result.put("kpiSummary", "暂无新旧方案 KPI 对比结果。");
             result.put("benefit", "暂无可评价的重调度收益。");
@@ -429,7 +464,11 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
 
         JSONObject impact = event.getImpactJson() == null || event.getImpactJson().trim().isEmpty()
                 ? new JSONObject() : JSON.parseObject(event.getImpactJson());
-        JSONObject strategy = impact.getJSONObject("strategy");
+        JSONObject strategy = impact.getJSONObject("strategyRecommendation");
+        if (strategy == null)
+        {
+            strategy = impact.getJSONObject("strategy");
+        }
         Map<String, Object> compare = apsSchedulePlanService.compareReschedulePlan(newPlan.getPlanId());
 
         Map<String, Object> summary = getMap(compare, "summary");
@@ -457,9 +496,7 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
                 + " 个、受影响订单 " + impact.getIntValue("affectedOrderCount")
                 + " 个、受影响设备 " + impact.getIntValue("affectedEquipmentCount")
                 + " 台，影响等级为 " + defaultText(impact.getString("impactLevel"), "UNKNOWN") + "。";
-        String strategyName = strategy == null ? null : strategy.getString("strategyName");
-        String strategySummary = "系统采用 " + defaultText(strategyName, event.getStrategyType())
-                + " 策略，目标是在优先保障插单交期的同时减少原计划变更。";
+        String strategySummary = buildStrategySummary(event, impact);
         String rescheduleSummary = "新方案任务数为 " + getLong(summary, "newTaskCount")
                 + "，其中插单任务 " + getLong(summary, "insertedTaskCount")
                 + " 个、冻结任务 " + getLong(summary, "frozenTaskCount")
@@ -592,8 +629,14 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
 
     private List<Map<String, Object>> buildInsertTasks(ApsOrder insertOrder)
     {
+        return buildInsertTasks(insertOrder, selectRouteOperations(insertOrder.getProductId()));
+    }
+
+    private List<Map<String, Object>> buildInsertTasks(ApsOrder insertOrder,
+            List<ApsRouteOperation> routeOperations)
+    {
         List<Map<String, Object>> insertTasks = new ArrayList<>();
-        for (ApsRouteOperation operation : selectRouteOperations(insertOrder.getProductId()))
+        for (ApsRouteOperation operation : routeOperations)
         {
             Map<String, Object> task = new LinkedHashMap<>();
             task.put("orderId", insertOrder.getOrderId());
@@ -610,43 +653,77 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
         return insertTasks;
     }
 
-    private Map<String, Object> buildStrategy(String impactLevel, long frozenTaskCount,
-            long adjustableTaskCount, int insertTaskCount)
+    private ImpactFeatures buildImpactFeatures(ApsInsertEvent event, ApsOrder insertOrder,
+            JSONObject impact, List<ApsScheduleTask> planTasks,
+            List<ApsRouteOperation> insertRoute, boolean stabilityRequired)
     {
-        String strategyType;
-        String strategyName;
-        String recommendedReason;
+        long totalTaskCount = planTasks.size();
+        long totalOrderCount = planTasks.stream()
+                .map(ApsScheduleTask::getOrderId)
+                .filter(item -> item != null)
+                .distinct()
+                .count();
+        long affectedTaskCount = impact.getLongValue("affectedTaskCount");
+        long affectedOrderCount = impact.getLongValue("affectedOrderCount");
+        long affectedEquipmentCount = impact.getLongValue("affectedEquipmentCount");
+        long totalEquipmentCount = selectEnabledEquipments().size();
+        long remainingProcessingMinutes = insertRoute.stream()
+                .map(ApsRouteOperation::getStandardDuration)
+                .filter(item -> item != null && item > 0)
+                .mapToLong(Integer::longValue)
+                .sum();
 
-        if ("LOW".equals(impactLevel))
+        Date scenarioTime = DateUtils.parseDate(impact.getString("impactWindowStart"));
+        if (scenarioTime == null)
         {
-            strategyType = "RIGHT_SHIFT";
-            strategyName = "右移重调度";
-            recommendedReason = "当前插单影响等级为 LOW，影响范围较小，可优先保持原加工序列，仅对受影响任务整体后移。";
+            scenarioTime = insertOrder.getReleaseTime() == null ? event.getEventTime() : insertOrder.getReleaseTime();
         }
-        else if ("MEDIUM".equals(impactLevel))
+        Date dueTime = insertOrder.getDueTime();
+        if (dueTime == null)
         {
-            strategyType = "LOCAL_RESCHEDULE";
-            strategyName = "局部重调度";
-            recommendedReason = "当前插单影响等级为 MEDIUM，建议仅重排受影响任务和插单任务，未受影响任务保持不变。";
+            dueTime = DateUtils.parseDate(impact.getString("impactWindowEnd"));
         }
-        else
-        {
-            strategyType = "LOCAL_RESCHEDULE_WITH_INSERT_PRIORITY";
-            strategyName = "插单优先的局部重调度";
-            recommendedReason = "当前插单影响等级为 HIGH，受影响任务较多，但 MVP 阶段采用插单优先的局部重调度，以避免全局重排带来的计划波动。";
-        }
+        long remainingDeliveryMinutes = scenarioTime == null || dueTime == null
+                ? 0L : Math.max(0L, (dueTime.getTime() - scenarioTime.getTime()) / 60000L);
+        double criticalRatio = remainingProcessingMinutes <= 0L
+                ? 999D : (double) remainingDeliveryMinutes / (double) remainingProcessingMinutes;
 
-        Map<String, Object> strategy = new LinkedHashMap<>();
-        strategy.put("strategyType", strategyType);
-        strategy.put("strategyName", strategyName);
-        strategy.put("freezePolicy", "未受影响任务保持不变，受影响任务进入可调整集合");
-        strategy.put("insertPolicy", "插单订单工序加入可调整集合，并按高优先级参与排序");
-        strategy.put("objective", "优先保证插单订单交期，同时尽量减少原计划变更");
-        strategy.put("frozenTaskCount", frozenTaskCount);
-        strategy.put("adjustableTaskCount", adjustableTaskCount);
-        strategy.put("insertTaskCount", insertTaskCount);
-        strategy.put("recommendedReason", recommendedReason);
-        return strategy;
+        ImpactFeatures features = new ImpactFeatures();
+        features.setImpactRate(safeRate(affectedTaskCount, totalTaskCount));
+        features.setLotImpactRate(safeRate(affectedOrderCount, totalOrderCount));
+        features.setCriticalRatio(criticalRatio);
+        features.setEquipmentImpactRate(safeRate(affectedEquipmentCount, totalEquipmentCount));
+        features.setInsertPriority(insertOrder.getPriorityLevel() == null ? 0 : insertOrder.getPriorityLevel());
+        features.setChangeRate(features.getImpactRate());
+        features.setRemainingDeliveryMinutes(remainingDeliveryMinutes);
+        features.setRemainingProcessingMinutes(remainingProcessingMinutes);
+        features.setStabilityRequired(stabilityRequired);
+        features.setAffectedEquipmentGroups(resolveEquipmentGroupNames(
+                parseLongSet(impact.get("affectedEquipmentGroupIds"))));
+        return features;
+    }
+
+    private double safeRate(long numerator, long denominator)
+    {
+        return denominator <= 0L ? 0D : (double) numerator / (double) denominator;
+    }
+
+    private List<String> resolveEquipmentGroupNames(Set<Long> groupIds)
+    {
+        List<String> result = new ArrayList<>();
+        for (Long groupId : groupIds)
+        {
+            ApsEquipmentGroup group = apsEquipmentGroupMapper.selectApsEquipmentGroupById(groupId);
+            if (group == null)
+            {
+                result.add("Tool Group " + groupId);
+            }
+            else
+            {
+                result.add(defaultText(group.getEquipmentGroupCode(), group.getEquipmentGroupName()));
+            }
+        }
+        return result;
     }
 
     private List<ApsRouteOperation> selectEnabledRouteOperations()
@@ -1000,6 +1077,29 @@ public class ApsInsertEventServiceImpl implements IApsInsertEventService
     private String defaultText(String value, String defaultValue)
     {
         return value == null || value.trim().isEmpty() ? defaultValue : value;
+    }
+
+    private String buildStrategySummary(ApsInsertEvent event, JSONObject impact)
+    {
+        JSONObject strategy = impact == null ? null : impact.getJSONObject("strategyRecommendation");
+        if (strategy == null && impact != null)
+        {
+            strategy = impact.getJSONObject("strategy");
+        }
+        if (strategy == null)
+        {
+            return event.getStrategyType() == null
+                    ? "尚未形成策略建议。"
+                    : "当前策略类型为 " + event.getStrategyType() + "，历史事件未保存完整推荐依据。";
+        }
+        String strategyCode = defaultText(strategy.getString("strategyCode"), event.getStrategyType());
+        String strategyName = defaultText(strategy.getString("strategyName"),
+                StrategySelector.strategyName(strategyCode));
+        String reason = defaultText(strategy.getString("strategyReason"),
+                strategy.getString("recommendedReason"));
+        return "系统推荐/采用 " + strategyName + "（" + defaultText(strategyCode, "UNKNOWN")
+                + "）。推荐依据：" + defaultText(reason, "当前事件未保存详细规则命中原因。")
+                + "该建议用于辅助调度员决策，不替代人工确认。";
     }
 
     private String buildEventSummary(ApsOrder insertOrder, ApsInsertEvent event)

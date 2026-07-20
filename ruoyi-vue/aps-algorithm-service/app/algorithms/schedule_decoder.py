@@ -51,7 +51,7 @@ def decode_local_reschedule(
     for task in request.frozenTasks:
         start = parse_time(task.plannedStartTime)
         end = parse_time(task.plannedEndTime)
-        task_schedules.append(task.copy(update={
+        task_schedules.append(task.model_copy(update={
             "isFrozen": "Y",
             "isInserted": "N",
             "isChanged": "N",
